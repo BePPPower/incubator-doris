@@ -51,6 +51,9 @@
 
 namespace doris::signal {
 
+inline thread_local uint64 query_id_hi;
+inline thread_local uint64 query_id_lo;
+
 namespace {
 
 // We'll install the failure signal handler for these signals.  We could
@@ -259,6 +262,11 @@ void DumpTimeInfo() {
     formatter.AppendString("*** Current BE git commitID: ");
     formatter.AppendString(DORIS_BUILD_SHORT_HASH);
     formatter.AppendString(" ***\n");
+    formatter.AppendString("*** Query id: ");
+    formatter.AppendUint64(query_id_hi, 16);
+    formatter.AppendString("-");
+    formatter.AppendUint64(query_id_lo, 16);
+    formatter.AppendString(" ***\n");
     g_failure_writer(buf, formatter.num_bytes_written());
 }
 
@@ -421,7 +429,7 @@ void FailureSignalHandler(int signal_number, siginfo_t* signal_info, void* ucont
 
 } // namespace
 
-void InstallFailureSignalHandler() {
+inline void InstallFailureSignalHandler() {
     // Build the sigaction struct.
     struct sigaction sig_action;
     memset(&sig_action, 0, sizeof(sig_action));
