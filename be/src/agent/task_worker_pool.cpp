@@ -260,6 +260,17 @@ void TaskWorkerPool::notify_thread() {
     VLOG_CRITICAL << "notify task worker pool: " << _name;
 }
 
+std::vector<TAgentTaskRequest> TaskWorkerPool::get_all_tasks_in_deque() {
+    std::vector<TAgentTaskRequest> res;
+    {
+        std::unique_lock<std::mutex> worker_thread_lock(_worker_thread_lock);
+        for (auto it = _tasks.begin(); it != _tasks.end(); ++it) {
+            res.emplace_back(*it);
+        }
+    }
+    return res;
+}
+
 bool TaskWorkerPool::_register_task_info(const TTaskType::type task_type, int64_t signature) {
     lock_guard<std::mutex> task_signatures_lock(_s_task_signatures_lock);
     set<int64_t>& signature_set = _s_task_signatures[task_type];

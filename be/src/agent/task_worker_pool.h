@@ -164,6 +164,8 @@ public:
     // notify the worker. currently for task/disk/tablet report thread
     void notify_thread();
 
+    std::vector<TAgentTaskRequest> get_all_tasks_in_deque();
+
 private:
     bool _register_task_info(const TTaskType::type task_type, int64_t signature);
     void _remove_task_info(const TTaskType::type task_type, int64_t signature);

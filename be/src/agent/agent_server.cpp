@@ -21,6 +21,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "agent/task_worker_pool.h"
 #include "agent/topic_subscriber.h"
@@ -246,6 +247,63 @@ void AgentServer::publish_cluster_state(TAgentResult& t_agent_result,
                                         const TAgentPublishRequest& request) {
     Status status = Status::NotSupported("deprecated method(publish_cluster_state) was invoked");
     status.to_thrift(&t_agent_result.status);
+}
+
+std::vector<TAgentTaskRequest> AgentServer::get_all_tasks() {
+    std::vector<TAgentTaskRequest> res;
+    std::vector<TAgentTaskRequest> tasks;
+    tasks = _create_tablet_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _drop_tablet_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _push_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _publish_version_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _clear_transaction_task_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _delete_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _alter_tablet_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _clone_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _storage_medium_migrate_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _check_consistency_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+
+    tasks = _report_task_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _report_disk_state_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _report_tablet_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+
+    tasks = _upload_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _download_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _make_snapshot_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _release_snapshot_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _move_dir_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _recover_tablet_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _update_tablet_meta_info_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+
+    tasks = _submit_table_compaction_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+
+    tasks = _storage_refresh_policy_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+    tasks = _storage_update_policy_workers->get_all_tasks_in_deque();
+    res.insert(res.end(), tasks.begin(), tasks.end());
+
+    return res;
 }
 
 } // namespace doris

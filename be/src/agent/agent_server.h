@@ -47,6 +47,8 @@ public:
     // [[deprecated]]
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
+    std::vector<TAgentTaskRequest> get_all_tasks();
+
 private:
     DISALLOW_COPY_AND_ASSIGN(AgentServer);
 
