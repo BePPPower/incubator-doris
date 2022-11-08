@@ -32,9 +32,11 @@ import org.apache.doris.common.UserException;
 import org.apache.doris.external.hive.util.HiveUtil;
 import org.apache.doris.load.BrokerFileGroup;
 import org.apache.doris.planner.external.ExternalFileScanNode.ParamCreateContext;
+import org.apache.doris.thrift.TFileAttributes;
 import org.apache.doris.thrift.TFileFormatType;
 import org.apache.doris.thrift.TFileScanRangeParams;
 import org.apache.doris.thrift.TFileScanSlotInfo;
+import org.apache.doris.thrift.TFileTextScanRangeParams;
 import org.apache.doris.thrift.TFileType;
 
 import com.google.common.collect.Lists;
@@ -241,21 +243,16 @@ public class HiveScanProvider extends HMSTableScanProvider {
     }
 
     @Override
-    public String getColumnSeparator() throws UserException {
-        return hmsTable.getRemoteTable().getSd().getSerdeInfo().getParameters()
-                .getOrDefault(PROP_FIELD_DELIMITER, DEFAULT_FIELD_DELIMITER);
+    public TFileAttributes getFileAttributes() throws UserException {
+        TFileTextScanRangeParams textParams = new TFileTextScanRangeParams();
+        textParams.setColumnSeparator(hmsTable.getRemoteTable().getSd().getSerdeInfo().getParameters()
+                .getOrDefault(PROP_FIELD_DELIMITER, DEFAULT_FIELD_DELIMITER));
+        textParams.setLineDelimiter(DEFAULT_LINE_DELIMITER);
+        TFileAttributes fileAttributes = new TFileAttributes();
+        fileAttributes.setTextParams(textParams);
+        fileAttributes.setHeaderType("");
+        return fileAttributes;
     }
-
-    @Override
-    public String getLineSeparator() {
-        return DEFAULT_LINE_DELIMITER;
-    }
-
-    @Override
-    public String getHeaderType() {
-        return "";
-    }
-
 }
 
 
