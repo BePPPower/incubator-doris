@@ -15,42 +15,47 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "io/fs/s3_file_reader.h"
+#include "io/fs/hdfs_file_reader.h"
 
-#include <aws/s3/S3Client.h>
-#include <aws/s3/model/GetObjectRequest.h>
-
-#include "io/fs/s3_common.h"
+#include "io/fs/hdfs_file_system.h"
+#include "service/backend_options.h"
 #include "util/doris_metrics.h"
-
 namespace doris {
 namespace io {
-
-S3FileReader::S3FileReader(Path path, size_t file_size, std::string key, std::string bucket,
-                           S3FileSystem* fs)
+HdfsFileReader::HdfsFileReader(Path path, size_t file_size, const std::string& name_node,
+                               hdfsFile hdfs_file, HdfsFileSystem* fs)
         : _path(std::move(path)),
           _file_size(file_size),
-          _fs(fs),
-          _bucket(std::move(bucket)),
-          _key(std::move(key)) {
+          _name_node(name_node),
+          _hdfs_file(hdfs_file),
+          _fs(fs) {
     DorisMetrics::instance()->s3_file_open_reading->increment(1);
     DorisMetrics::instance()->s3_file_reader_total->increment(1);
 }
 
-S3FileReader::~S3FileReader() {
+HdfsFileReader::~HdfsFileReader() {
     close();
 }
 
-Status S3FileReader::close() {
+Status HdfsFileReader::close() {
     bool expected = false;
     if (_closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        auto handle = _fs->get_handle();
+        auto hdfs_fs = handle->hdfs_fs;
+        if (_hdfs_file != nullptr && hdfs_fs != nullptr) {
+            VLOG_NOTICE << "close hdfs file: " << _name_node << _path;
+            // If the hdfs file was valid, the memory associated with it will
+            // be freed at the end of this call, even if there was an I/O error
+            hdfsCloseFile(hdfs_fs, _hdfs_file);
+        }
+
         DorisMetrics::instance()->s3_file_open_reading->increment(-1);
     }
     return Status::OK();
 }
 
-Status S3FileReader::read_at(size_t offset, Slice result, const IOContext& /*io_ctx*/,
-                             size_t* bytes_read) {
+Status HdfsFileReader::read_at(size_t offset, Slice result, const IOContext& /*io_ctx*/,
+                               size_t* bytes_read) {
     DCHECK(!closed());
     if (offset > _file_size) {
         return Status::IOError("offset exceeds file size(offset: {}, file size: {}, path: {})",
@@ -64,28 +69,24 @@ Status S3FileReader::read_at(size_t offset, Slice result, const IOContext& /*io_
         return Status::OK();
     }
 
-    Aws::S3::Model::GetObjectRequest request;
-    request.WithBucket(_bucket).WithKey(_key);
-    request.SetRange(fmt::format("bytes={}-{}", offset, offset + bytes_req - 1));
-    request.SetResponseStreamFactory(AwsWriteableStreamFactory(to, bytes_req));
-
-    auto client = _fs->get_client();
-    if (!client) {
-        return Status::InternalError("init s3 client error");
+    auto handle = _fs->get_handle();
+    int64_t has_read = 0;
+    while (has_read < bytes_req) {
+        int64_t loop_read =
+                hdfsRead(handle->hdfs_fs, _hdfs_file, to + has_read, bytes_req - has_read);
+        if (loop_read < 0) {
+            return Status::InternalError(
+                    "Read hdfs file failed. (BE: {}) namenode:{}, path:{}, err: {}",
+                    BackendOptions::get_localhost(), _name_node, _path.string(),
+                    hdfsGetLastError());
+        }
+        if (loop_read == 0) {
+            break;
+        }
+        has_read += loop_read;
     }
-    auto outcome = client->GetObject(request);
-    if (!outcome.IsSuccess()) {
-        return Status::IOError("failed to read from {}: {}", _path.native(),
-                               outcome.GetError().GetMessage());
-    }
-    *bytes_read = outcome.GetResult().GetContentLength();
-    if (*bytes_read != bytes_req) {
-        return Status::IOError("failed to read from {}(bytes read: {}, bytes req: {})",
-                               _path.native(), *bytes_read, bytes_req);
-    }
-    DorisMetrics::instance()->s3_bytes_read_total->increment(*bytes_read);
+    *bytes_read = has_read;
     return Status::OK();
 }
-
 } // namespace io
 } // namespace doris
