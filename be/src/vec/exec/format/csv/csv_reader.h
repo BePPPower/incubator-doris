@@ -18,7 +18,13 @@
 #pragma once
 
 #include "vec/exec/format/generic_reader.h"
+#include "io/fs/file_reader.h"
+
 namespace doris {
+
+namespace io {
+    class FileReader;
+}
 
 class FileReader;
 class LineReader;
@@ -107,6 +113,9 @@ private:
     std::string _line_delimiter;
     int _value_separator_length;
     int _line_delimiter_length;
+
+    std::unique_ptr<io::FileSystem> _new_file_system;
+    io::FileReaderSPtr _new_file_reader;
 
     // save source text which have been splitted.
     std::vector<Slice> _split_values;
