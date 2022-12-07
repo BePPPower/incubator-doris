@@ -513,29 +513,32 @@ Status CsvReader::_prepare_parse(size_t* read_line, bool* is_parse_name) {
         }
     }
 
-    FileSystemProperties system_properties;
-    system_properties.system_type = _params.file_type;
-    system_properties.hdfs_params = _params.hdfs_params;
+    bool use_new_file_reader = true;
+    if (use_new_file_reader) {
+        FileSystemProperties system_properties;
+        system_properties.system_type = _params.file_type;
+        system_properties.hdfs_params = _params.hdfs_params;
 
-    FileDescription file_description;
-    file_description.path = _range.path;
-    file_description.start_offset = start_offset;
-    file_description.file_size = _range.file_size;
-    file_description.buffer_size = 0;
+        FileDescription file_description;
+        file_description.path = _range.path;
+        file_description.start_offset = start_offset;
+        file_description.file_size = _range.file_size;
+        file_description.buffer_size = 0;
 
-    // create and open file reader
-    // RETURN_IF_ERROR(FileFactory::create_file_reader(_profile, _params, _range.path, start_offset,
-    //                                                 _range.file_size, 0, _file_reader));
-    // RETURN_IF_ERROR(_file_reader->open());
-    // if (_file_reader->size() == 0) {
-    //     return Status::EndOfFile("Empty File");
-    // }
-    RETURN_IF_ERROR(NewFileFactory::create_file_reader(_profile, system_properties, file_description,
-                                                       &_new_file_system, &_new_file_reader));
-    if (_new_file_reader -> size() == 0) {
-        return Status::EndOfFile("Empty File");
+        RETURN_IF_ERROR(NewFileFactory::create_file_reader(_profile, system_properties, file_description,
+                                                           &_new_file_system, &_new_file_reader));
+        if (_new_file_reader -> size() == 0) {
+            return Status::EndOfFile("Empty File");
+        }
+    } else {
+        // create and open file reader
+        RETURN_IF_ERROR(FileFactory::create_file_reader(_profile, _params, _range.path, start_offset,
+                                                        _range.file_size, 0, _file_reader));
+        RETURN_IF_ERROR(_file_reader->open());
+        if (_file_reader->size() == 0) {
+            return Status::EndOfFile("Empty File");
+        }
     }
-
 
     // get column_separator and line_delimiter
     _value_separator = _params.file_attributes.text_params.column_separator;
@@ -547,11 +550,13 @@ Status CsvReader::_prepare_parse(size_t* read_line, bool* is_parse_name) {
     // _decompressor may be nullptr if this is not a compressed file
     RETURN_IF_ERROR(_create_decompressor());
 
-    // _line_reader.reset(new PlainTextLineReader(_profile, _file_reader.get(), _decompressor.get(),
-    //                                            _size, _line_delimiter, _line_delimiter_length));
-
-    _line_reader.reset(new NewPlainTextLineReader(_profile, _new_file_reader.get(), _decompressor.get(),
-                                                  _size, _line_delimiter, _line_delimiter_length, start_offset));
+    if (use_new_file_reader) {
+        _line_reader.reset(new NewPlainTextLineReader(_profile, _new_file_reader.get(), _decompressor.get(),
+                                                      _size, _line_delimiter, _line_delimiter_length, start_offset));
+    } else {
+        _line_reader.reset(new PlainTextLineReader(_profile, _file_reader.get(), _decompressor.get(),
+                                                   _size, _line_delimiter, _line_delimiter_length));
+    }
 
     return Status::OK();
 }
