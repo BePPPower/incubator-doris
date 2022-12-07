@@ -103,36 +103,58 @@ Status CsvReader::init_reader(bool is_load) {
         _skip_lines = 1;
     }
 
-    FileSystemProperties system_properties;
-    system_properties.system_type = _params.file_type;
-    system_properties.hdfs_params = _params.hdfs_params;
-
-    FileDescription file_description;
-    file_description.path = _range.path;
-    file_description.start_offset = start_offset;
-    file_description.file_size = _range.file_size;
-    file_description.buffer_size = 0;
-
     // create and open file reader
-    // FileReader* real_reader = nullptr;
-    if (_params.file_type == TFileType::FILE_STREAM) {
-        // RETURN_IF_ERROR(FileFactory::create_pipe_reader(_range.load_id, _file_reader_s));
-        // real_reader = _file_reader_s.get();
+    FileReader* real_reader = nullptr;
+
+    bool use_new_file_reader = true;
+    if (use_new_file_reader) {
+        FileSystemProperties system_properties;
+        system_properties.system_type = _params.file_type;
+        switch (system_properties.system_type) {
+        case TFileType::FILE_S3:
+            system_properties.properties = _params.properties;
+            break;
+        case TFileType::FILE_HDFS:
+            system_properties.hdfs_params = _params.hdfs_params;
+            break;
+        default:
+            return Status::NotSupported("Not support file type: {}", system_properties.system_type);
+        }
+
+        FileDescription file_description;
+        file_description.path = _range.path;
+        file_description.start_offset = start_offset;
+        file_description.file_size = _range.file_size;
+        file_description.buffer_size = 0;
+
+        if (_params.file_type == TFileType::FILE_STREAM) {
+            // RETURN_IF_ERROR(FileFactory::create_pipe_reader(_range.load_id, _file_reader_s));
+            // real_reader = _file_reader_s.get();
+        } else {
+            // RETURN_IF_ERROR(FileFactory::create_file_reader(
+            //         _profile, _params, _range.path, start_offset, _range.file_size, 0, _file_reader));
+            RETURN_IF_ERROR(NewFileFactory::create_file_reader(_profile, system_properties,
+                                                               file_description, &_new_file_system,
+                                                               &_new_file_reader));
+        }
+        if (_new_file_reader->size() == 0) {
+            return Status::EndOfFile("Empty File");
+        }
     } else {
-        // RETURN_IF_ERROR(FileFactory::create_file_reader(
-        //         _profile, _params, _range.path, start_offset, _range.file_size, 0, _file_reader));
-        RETURN_IF_ERROR(NewFileFactory::create_file_reader(_profile, system_properties,
-                                                           file_description, &_new_file_system,
-                                                           &_new_file_reader));
+        if (_params.file_type == TFileType::FILE_STREAM) {
+            RETURN_IF_ERROR(FileFactory::create_pipe_reader(_range.load_id, _file_reader_s));
+            real_reader = _file_reader_s.get();
+        } else {
+            RETURN_IF_ERROR(FileFactory::create_file_reader(_profile, _params, _range.path,
+                                                            start_offset, _range.file_size, 0,
+                                                            _file_reader));
+        }
+        RETURN_IF_ERROR(real_reader->open());
+        if (real_reader->size() == 0 && _params.file_type != TFileType::FILE_STREAM &&
+            _params.file_type != TFileType::FILE_BROKER) {
+            return Status::EndOfFile("Empty File");
+        }
     }
-    if (_new_file_reader->size() == 0) {
-        return Status::EndOfFile("Empty File");
-    }
-    // RETURN_IF_ERROR(real_reader->open());
-    // if (real_reader->size() == 0 && _params.file_type != TFileType::FILE_STREAM &&
-    //     _params.file_type != TFileType::FILE_BROKER) {
-    //     return Status::EndOfFile("Empty File");
-    // }
 
     // get column_separator and line_delimiter
     _value_separator = _params.file_attributes.text_params.column_separator;
@@ -151,11 +173,15 @@ Status CsvReader::init_reader(bool is_load) {
     case TFileFormatType::FORMAT_CSV_LZ4FRAME:
     case TFileFormatType::FORMAT_CSV_LZOP:
     case TFileFormatType::FORMAT_CSV_DEFLATE:
-        // _line_reader.reset(new PlainTextLineReader(_profile, real_reader, _decompressor.get(),
-        //                                            _size, _line_delimiter, _line_delimiter_length));
-        _line_reader.reset(new NewPlainTextLineReader(_profile, _new_file_reader.get(),
-                                                      _decompressor.get(), _size, _line_delimiter,
-                                                      _line_delimiter_length, start_offset));
+        if (use_new_file_reader) {
+            _line_reader.reset(new NewPlainTextLineReader(
+                    _profile, _new_file_reader.get(), _decompressor.get(), _size, _line_delimiter,
+                    _line_delimiter_length, start_offset));
+        } else {
+            _line_reader.reset(new PlainTextLineReader(_profile, real_reader, _decompressor.get(),
+                                                       _size, _line_delimiter,
+                                                       _line_delimiter_length));
+        }
         break;
     case TFileFormatType::FORMAT_PROTO:
         // _line_reader.reset(new PlainBinaryLineReader(real_reader));
@@ -518,7 +544,16 @@ Status CsvReader::_prepare_parse(size_t* read_line, bool* is_parse_name) {
     if (use_new_file_reader) {
         FileSystemProperties system_properties;
         system_properties.system_type = _params.file_type;
-        system_properties.hdfs_params = _params.hdfs_params;
+        switch (system_properties.system_type) {
+        case TFileType::FILE_S3:
+            system_properties.properties = _params.properties;
+            break;
+        case TFileType::FILE_HDFS:
+            system_properties.hdfs_params = _params.hdfs_params;
+            break;
+        default:
+            return Status::NotSupported("Not support file type: {}", system_properties.system_type);
+        }
 
         FileDescription file_description;
         file_description.path = _range.path;
