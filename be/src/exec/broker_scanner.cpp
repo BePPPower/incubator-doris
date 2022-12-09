@@ -28,11 +28,14 @@
 #include "exec/plain_binary_line_reader.h"
 #include "exec/plain_text_line_reader.h"
 #include "io/file_factory.h"
+#include "io/fs/file_system.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/tuple.h"
 #include "util/string_util.h"
 #include "util/utf8_check.h"
+#include "vec/exec/format/file_reader/new_file_factory.h"
+#include "vec/exec/format/file_reader/new_plain_text_line_reader.h"
 
 namespace doris {
 
@@ -46,7 +49,8 @@ BrokerScanner::BrokerScanner(RuntimeState* state, RuntimeProfile* profile,
           _cur_line_reader(nullptr),
           _cur_decompressor(nullptr),
           _cur_line_reader_eof(false),
-          _skip_lines(0) {
+          _skip_lines(0),
+          _new_file_system(nullptr) {
     if (params.__isset.column_separator_length && params.column_separator_length > 1) {
         _value_separator = params.column_separator_str;
         _value_separator_length = params.column_separator_length;
@@ -136,6 +140,23 @@ Status BrokerScanner::open_file_reader() {
         }
     }
 
+    bool use_new_broker_reader = true;
+    if (use_new_broker_reader) {
+        FileSystemProperties system_properties;
+        system_properties.system_type = range.file_type;
+        system_properties.properties = _params.properties;
+        system_properties.broker_addresses = _broker_addresses;
+
+        FileDescription file_description;
+        file_description.path = range.path;
+        file_description.start_offset = start_offset;
+        file_description.file_size = range.file_size;
+        file_description.buffer_size = 0;
+        RETURN_IF_ERROR(NewFileFactory::create_file_reader(_profile, system_properties,
+                                                           file_description, &_new_file_system,
+                                                           &_new_file_reader));
+        return Status::OK();
+    }
     if (range.file_type == TFileType::FILE_STREAM) {
         RETURN_IF_ERROR(FileFactory::create_pipe_reader(range.load_id, _cur_file_reader_s));
         _real_reader = _cur_file_reader_s.get();
@@ -212,6 +233,7 @@ Status BrokerScanner::open_line_reader() {
     // _decompressor may be nullptr if this is not a compressed file
     RETURN_IF_ERROR(create_decompressor(range.format_type));
 
+    bool use_new_file_reader = true;
     _file_format_type = range.format_type;
     // open line reader
     switch (range.format_type) {
@@ -221,8 +243,15 @@ Status BrokerScanner::open_line_reader() {
     case TFileFormatType::FORMAT_CSV_LZ4FRAME:
     case TFileFormatType::FORMAT_CSV_LZOP:
     case TFileFormatType::FORMAT_CSV_DEFLATE:
-        _cur_line_reader = new PlainTextLineReader(_profile, _real_reader, _cur_decompressor, size,
-                                                   _line_delimiter, _line_delimiter_length);
+        if (use_new_file_reader) {
+            _cur_line_reader = new NewPlainTextLineReader(
+                    _profile, _new_file_reader.get(), _cur_decompressor, size, _line_delimiter,
+                    _line_delimiter_length, range.start_offset);
+        } else {
+            _cur_line_reader =
+                    new PlainTextLineReader(_profile, _real_reader, _cur_decompressor, size,
+                                            _line_delimiter, _line_delimiter_length);
+        }
         break;
     case TFileFormatType::FORMAT_PROTO:
         _cur_line_reader = new PlainBinaryLineReader(_real_reader);

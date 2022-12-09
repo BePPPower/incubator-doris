@@ -27,6 +27,7 @@
 #include "exec/base_scanner.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
+#include "io/fs/file_reader.h"
 #include "runtime/mem_pool.h"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
@@ -120,6 +121,9 @@ protected:
     // When we fetch range start from 0, header_type="csv_with_names_and_types" skip first two line
     // When we fetch range doesn't start from 0 will always skip the first line
     int _skip_lines;
+
+    std::unique_ptr<io::FileSystem> _new_file_system;
+    io::FileReaderSPtr _new_file_reader;
 
     std::vector<Slice> _split_values;
 };
