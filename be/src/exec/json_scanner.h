@@ -33,9 +33,9 @@
 #include "exec/base_scanner.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
+#include "io/fs/file_reader.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
-#include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/tuple.h"
 #include "util/runtime_profile.h"
 
@@ -46,7 +46,6 @@ class RuntimeState;
 class TupleDescriptor;
 class JsonReader;
 class LineReader;
-class FileReader;
 
 class JsonScanner : public BaseScanner {
 public:
@@ -54,7 +53,7 @@ public:
                 const std::vector<TBrokerRangeDesc>& ranges,
                 const std::vector<TNetworkAddress>& broker_addresses,
                 const std::vector<TExpr>& pre_filter_texprs, ScannerCounter* counter);
-    ~JsonScanner();
+    ~JsonScanner() override;
 
     // Open this scanner, will initialize information needed
     Status open() override;
@@ -79,7 +78,6 @@ protected:
     Status get_range_params(std::string& jsonpath, std::string& json_root, bool& strip_outer_array,
                             bool& num_as_string, bool& fuzzy_parse);
 
-protected:
     std::string _jsonpath;
     std::string _jsonpath_file;
 
@@ -87,16 +85,14 @@ protected:
     int _line_delimiter_length;
 
     // Reader
-    // _cur_file_reader_s is for stream load pipe reader,
-    // and _cur_file_reader is for other file reader.
-    // TODO: refactor this to use only shared_ptr or unique_ptr
-    std::unique_ptr<FileReader> _cur_file_reader;
-    std::shared_ptr<FileReader> _cur_file_reader_s;
-    FileReader* _real_reader;
+    std::unique_ptr<io::FileSystem> _file_system;
+    io::FileReaderSPtr _file_reader;
     LineReader* _cur_line_reader;
     JsonReader* _cur_json_reader;
     bool _cur_reader_eof;
     bool _read_json_by_line;
+
+    size_t _current_offset;
 
     // When we fetch range doesn't start from 0,
     // we will read to one ahead, and skip the first line
@@ -106,7 +102,7 @@ protected:
 class JsonDataInternal {
 public:
     JsonDataInternal(rapidjson::Value* v);
-    ~JsonDataInternal() {}
+    ~JsonDataInternal() = default;
     rapidjson::Value::ConstValueIterator get_next();
     bool is_null() const { return _json_values == nullptr; }
 
@@ -124,7 +120,8 @@ class JsonReader {
 public:
     JsonReader(RuntimeState* state, ScannerCounter* counter, RuntimeProfile* profile,
                bool strip_outer_array, bool num_as_string, bool fuzzy_parse, bool* scanner_eof,
-               FileReader* file_reader = nullptr, LineReader* line_reader = nullptr);
+               size_t current_offset, TFileType::type file_type,
+               io::FileReaderSPtr _file_reader = nullptr, LineReader* line_reader = nullptr);
 
     ~JsonReader();
 
@@ -164,13 +161,14 @@ protected:
                                 std::vector<std::vector<JsonPath>>* vect);
     Status _parse_jsonpath_and_json_root(const std::string& jsonpath, const std::string& json_root);
 
-protected:
+    Status _read_one_message(std::unique_ptr<uint8_t[]>* file_buf, size_t* read_size);
+
     int _next_line;
     int _total_lines;
     RuntimeState* _state;
     ScannerCounter* _counter;
     RuntimeProfile* _profile;
-    FileReader* _file_reader;
+    io::FileReaderSPtr _file_reader;
     LineReader* _line_reader;
     bool _closed;
     bool _strip_outer_array;
@@ -186,9 +184,8 @@ protected:
     char _value_buffer[4 * 1024 * 1024];
     char _parse_buffer[512 * 1024];
 
-    typedef rapidjson::GenericDocument<rapidjson::UTF8<>, rapidjson::MemoryPoolAllocator<>,
-                                       rapidjson::MemoryPoolAllocator<>>
-            Document;
+    using Document = rapidjson::GenericDocument<rapidjson::UTF8<>, rapidjson::MemoryPoolAllocator<>,
+                                                rapidjson::MemoryPoolAllocator<>>;
     rapidjson::MemoryPoolAllocator<> _value_allocator;
     rapidjson::MemoryPoolAllocator<> _parse_allocator;
     Document _origin_json_doc;   // origin json document object from parsed json string
@@ -197,6 +194,9 @@ protected:
 
     // point to the _scanner_eof of JsonScanner
     bool* _scanner_eof;
-};
 
+    size_t _current_offset;
+
+    TFileType::type _file_type;
+};
 } // namespace doris

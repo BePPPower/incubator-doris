@@ -27,7 +27,7 @@
 
 namespace doris::vectorized {
 
-Status ParquetColumnReader::create(FileReader* file, FieldSchema* field,
+Status ParquetColumnReader::create(io::FileReaderSPtr file, FieldSchema* field,
                                    const tparquet::RowGroup& row_group, cctz::time_zone* ctz,
                                    std::unique_ptr<ParquetColumnReader>& reader,
                                    size_t max_buf_size) {
@@ -83,8 +83,8 @@ void ParquetColumnReader::_generate_read_ranges(int64_t start_index, int64_t end
     }
 }
 
-Status ScalarColumnReader::init(FileReader* file, FieldSchema* field, tparquet::ColumnChunk* chunk,
-                                size_t max_buf_size) {
+Status ScalarColumnReader::init(io::FileReaderSPtr file, FieldSchema* field,
+                                tparquet::ColumnChunk* chunk, size_t max_buf_size) {
     _stream_reader =
             new BufferedFileStreamReader(file, _metadata->start_offset(), _metadata->size(),
                                          std::min((size_t)_metadata->size(), max_buf_size));
@@ -276,8 +276,8 @@ void ArrayColumnReader::_reserve_def_levels_buf(size_t size) {
     }
 }
 
-Status ArrayColumnReader::init(FileReader* file, FieldSchema* field, tparquet::ColumnChunk* chunk,
-                               size_t max_buf_size) {
+Status ArrayColumnReader::init(io::FileReaderSPtr file, FieldSchema* field,
+                               tparquet::ColumnChunk* chunk, size_t max_buf_size) {
     _stream_reader =
             new BufferedFileStreamReader(file, _metadata->start_offset(), _metadata->size(),
                                          std::min((size_t)_metadata->size(), max_buf_size));

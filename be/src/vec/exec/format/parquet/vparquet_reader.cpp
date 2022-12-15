@@ -20,6 +20,7 @@
 #include <algorithm>
 
 #include "io/file_factory.h"
+#include "olap/iterators.h"
 #include "parquet_pred_cmp.h"
 #include "parquet_thrift_util.h"
 #include "vec/exprs/vbloom_predicate.h"
@@ -134,18 +135,26 @@ void ParquetReader::close() {
 }
 
 Status ParquetReader::_open_file() {
+    FileSystemProperties system_properties;
+    system_properties.system_type = _scan_params.file_type;
+    system_properties.properties = _scan_params.properties;
+    system_properties.hdfs_params = _scan_params.hdfs_params;
+
+    FileDescription file_description;
+    file_description.path = _scan_range.path;
+    file_description.start_offset = _scan_range.start_offset;
+    file_description.file_size = _scan_range.__isset.file_size ? _scan_range.file_size : 0;
+
     if (_file_reader == nullptr) {
-        RETURN_IF_ERROR(FileFactory::create_file_reader(_profile, _scan_params, _scan_range.path,
-                                                        _scan_range.start_offset,
-                                                        _scan_range.file_size, 0, _file_reader));
+        RETURN_IF_ERROR(FileFactory::create_file_reader(
+                _profile, system_properties, file_description, &_file_system, &_file_reader));
     }
     if (_file_metadata == nullptr) {
         SCOPED_RAW_TIMER(&_statistics.parse_meta_time);
-        RETURN_IF_ERROR(_file_reader->open());
         if (_file_reader->size() == 0) {
             return Status::EndOfFile("Empty Parquet File");
         }
-        RETURN_IF_ERROR(parse_thrift_footer(_file_reader.get(), _file_metadata));
+        RETURN_IF_ERROR(parse_thrift_footer(_file_reader, _file_metadata));
     }
     return Status::OK();
 }
@@ -319,16 +328,24 @@ std::unordered_map<std::string, TypeDescriptor> ParquetReader::get_name_to_type(
 
 Status ParquetReader::get_parsered_schema(std::vector<std::string>* col_names,
                                           std::vector<TypeDescriptor>* col_types) {
+    FileSystemProperties system_properties;
+    system_properties.system_type = _scan_params.file_type;
+    system_properties.properties = _scan_params.properties;
+    system_properties.hdfs_params = _scan_params.hdfs_params;
+
+    FileDescription file_description;
+    file_description.path = _scan_range.path;
+    file_description.start_offset = _scan_range.start_offset;
+    file_description.file_size = _scan_range.__isset.file_size ? _scan_range.file_size : 0;
+
     if (_file_reader == nullptr) {
-        RETURN_IF_ERROR(FileFactory::create_file_reader(_profile, _scan_params, _scan_range.path,
-                                                        _scan_range.start_offset,
-                                                        _scan_range.file_size, 0, _file_reader));
+        RETURN_IF_ERROR(FileFactory::create_file_reader(
+                _profile, system_properties, file_description, &_file_system, &_file_reader));
     }
-    RETURN_IF_ERROR(_file_reader->open());
     if (_file_reader->size() == 0) {
         return Status::EndOfFile("Empty Parquet File");
     }
-    RETURN_IF_ERROR(parse_thrift_footer(_file_reader.get(), _file_metadata));
+    RETURN_IF_ERROR(parse_thrift_footer(_file_reader, _file_metadata));
     _t_metadata = &_file_metadata->to_thrift();
 
     _total_groups = _t_metadata->row_groups.size();
@@ -458,7 +475,7 @@ Status ParquetReader::_init_row_group_readers(const bool& filter_groups) {
     for (auto row_group_id : _read_row_groups) {
         auto& row_group = _t_metadata->row_groups[row_group_id];
         std::shared_ptr<RowGroupReader> row_group_reader;
-        row_group_reader.reset(new RowGroupReader(_file_reader.get(), _read_columns, *group_index,
+        row_group_reader.reset(new RowGroupReader(_file_reader, _read_columns, *group_index,
                                                   row_group, _ctz, _lazy_read_ctx));
         group_index++;
         RETURN_IF_ERROR(_process_page_index(row_group));
@@ -547,9 +564,11 @@ Status ParquetReader::_process_page_index(const tparquet::RowGroup& row_group) {
     }
     int64_t buffer_size = page_index._column_index_size + page_index._offset_index_size;
     uint8_t buff[buffer_size];
-    int64_t bytes_read = 0;
+    size_t bytes_read = 0;
+    Slice result(buff, buffer_size);
+    IOContext io_ctx;
     RETURN_IF_ERROR(
-            _file_reader->readat(page_index._column_index_start, buffer_size, &bytes_read, buff));
+            _file_reader->read_at(page_index._column_index_start, result, io_ctx, &bytes_read));
 
     auto& schema_desc = _file_metadata->schema();
     std::vector<RowRange> skipped_row_ranges;

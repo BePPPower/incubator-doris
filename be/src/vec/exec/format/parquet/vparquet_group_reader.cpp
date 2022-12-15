@@ -23,7 +23,7 @@
 
 namespace doris::vectorized {
 
-RowGroupReader::RowGroupReader(doris::FileReader* file_reader,
+RowGroupReader::RowGroupReader(io::FileReaderSPtr file_reader,
                                const std::vector<ParquetReadColumn>& read_columns,
                                const RowGroupIndex& row_group_idx,
                                const tparquet::RowGroup& row_group, cctz::time_zone* ctz,
