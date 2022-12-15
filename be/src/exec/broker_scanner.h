@@ -27,6 +27,8 @@
 #include "exec/base_scanner.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
+#include "io/fs/file_reader.h"
+#include "io/fs/file_system.h"
 #include "runtime/mem_pool.h"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
@@ -37,7 +39,6 @@ class Tuple;
 class SlotDescriptor;
 struct Slice;
 class TextConverter;
-class FileReader;
 class LineReader;
 class Decompressor;
 class RuntimeState;
@@ -61,8 +62,7 @@ public:
     Status open() override;
 
     // Get next tuple
-    virtual Status get_next(Tuple* tuple, MemPool* tuple_pool, bool* eof,
-                            bool* fill_tuple) override;
+    Status get_next(Tuple* tuple, MemPool* tuple_pool, bool* eof, bool* fill_tuple) override;
 
     Status get_next(vectorized::Block* block, bool* eof) override {
         return Status::NotSupported("Not Implemented get block");
@@ -106,12 +106,8 @@ protected:
     int _line_delimiter_length;
 
     // Reader
-    // _cur_file_reader_s is for stream load pipe reader,
-    // and _cur_file_reader is for other file reader.
-    // TODO: refactor this to use only shared_ptr or unique_ptr
-    std::unique_ptr<FileReader> _cur_file_reader;
-    std::shared_ptr<FileReader> _cur_file_reader_s;
-    FileReader* _real_reader;
+    std::unique_ptr<io::FileSystem> _file_system;
+    io::FileReaderSPtr _file_reader;
     LineReader* _cur_line_reader;
     Decompressor* _cur_decompressor;
     bool _cur_line_reader_eof;
@@ -120,6 +116,8 @@ protected:
     // When we fetch range start from 0, header_type="csv_with_names_and_types" skip first two line
     // When we fetch range doesn't start from 0 will always skip the first line
     int _skip_lines;
+
+    size_t _current_offset;
 
     std::vector<Slice> _split_values;
 };

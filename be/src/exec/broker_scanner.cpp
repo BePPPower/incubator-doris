@@ -29,7 +29,6 @@
 #include "exec/plain_text_line_reader.h"
 #include "io/file_factory.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/tuple.h"
 #include "util/string_util.h"
 #include "util/utf8_check.h"
@@ -42,11 +41,12 @@ BrokerScanner::BrokerScanner(RuntimeState* state, RuntimeProfile* profile,
                              const std::vector<TNetworkAddress>& broker_addresses,
                              const std::vector<TExpr>& pre_filter_texprs, ScannerCounter* counter)
         : BaseScanner(state, profile, params, ranges, broker_addresses, pre_filter_texprs, counter),
-          _cur_file_reader(nullptr),
-          _cur_line_reader(nullptr),
+          _file_system(nullptr),
+          _file_reader(nullptr),
           _cur_decompressor(nullptr),
           _cur_line_reader_eof(false),
-          _skip_lines(0) {
+          _skip_lines(0),
+          _current_offset(0) {
     if (params.__isset.column_separator_length && params.column_separator_length > 1) {
         _value_separator = params.column_separator_str;
         _value_separator_length = params.column_separator_length;
@@ -135,17 +135,26 @@ Status BrokerScanner::open_file_reader() {
             _skip_lines = 2;
         }
     }
+    _current_offset = start_offset;
+
+    FileSystemProperties system_properties;
+    system_properties.system_type = range.file_type;
+    system_properties.properties = _params.properties;
+    system_properties.hdfs_params = range.hdfs_params;
+    system_properties.broker_addresses = _broker_addresses;
+
+    FileDescription file_description;
+    file_description.path = range.path;
+    file_description.start_offset = start_offset;
+    file_description.file_size = range.__isset.file_size ? range.file_size : 0;
 
     if (range.file_type == TFileType::FILE_STREAM) {
-        RETURN_IF_ERROR(FileFactory::create_pipe_reader(range.load_id, _cur_file_reader_s));
-        _real_reader = _cur_file_reader_s.get();
+        RETURN_IF_ERROR(FileFactory::create_pipe_reader(range.load_id, &_file_reader));
     } else {
         RETURN_IF_ERROR(FileFactory::create_file_reader(
-                range.file_type, _state->exec_env(), _profile, _broker_addresses,
-                _params.properties, range, start_offset, _cur_file_reader));
-        _real_reader = _cur_file_reader.get();
+                _profile, system_properties, file_description, &_file_system, &_file_reader));
     }
-    return _real_reader->open();
+    return Status::OK();
 }
 
 Status BrokerScanner::create_decompressor(TFileFormatType::type type) {
@@ -221,11 +230,12 @@ Status BrokerScanner::open_line_reader() {
     case TFileFormatType::FORMAT_CSV_LZ4FRAME:
     case TFileFormatType::FORMAT_CSV_LZOP:
     case TFileFormatType::FORMAT_CSV_DEFLATE:
-        _cur_line_reader = new PlainTextLineReader(_profile, _real_reader, _cur_decompressor, size,
-                                                   _line_delimiter, _line_delimiter_length);
+        _cur_line_reader =
+                new PlainTextLineReader(_profile, _file_reader, _cur_decompressor, size,
+                                        _line_delimiter, _line_delimiter_length, _current_offset);
         break;
     case TFileFormatType::FORMAT_PROTO:
-        _cur_line_reader = new PlainBinaryLineReader(_real_reader);
+        _cur_line_reader = new PlainBinaryLineReader(_file_reader, range.file_type);
         break;
     default: {
         return Status::InternalError("Unknown format type, cannot init line reader, type={}",
