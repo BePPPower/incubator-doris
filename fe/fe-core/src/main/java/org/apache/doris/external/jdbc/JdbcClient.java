@@ -163,8 +163,11 @@ public class JdbcClient {
                     rs = stmt.executeQuery("SELECT schema_name FROM information_schema.schemata "
                             + "where schema_owner='" + jdbcUser + "';");
                     break;
+                case JdbcResource.ORACLE:
+                    rs = stmt.executeQuery("SELECT DISTINCT owner FROM all_tables;");
+                    break;
                 default:
-                    throw  new JdbcClientException("Not supported jdbc type");
+                    throw new JdbcClientException("Not supported jdbc type");
             }
 
             while (rs.next()) {
@@ -220,6 +223,7 @@ public class JdbcClient {
                     rs = databaseMetaData.getTables(dbName, null, tableName, types);
                     break;
                 case JdbcResource.POSTGRESQL:
+                case JdbcResource.ORACLE:
                     rs = databaseMetaData.getTables(null, dbName, null, types);
                     break;
                 default:
@@ -288,6 +292,7 @@ public class JdbcClient {
                     rs = databaseMetaData.getColumns(dbName, null, tableName, null);
                     break;
                 case JdbcResource.POSTGRESQL:
+                case JdbcResource.ORACLE:
                     rs = databaseMetaData.getColumns(null, dbName, tableName, null);
                     break;
                 default:
