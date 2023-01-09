@@ -164,7 +164,7 @@ public class JdbcClient {
                             + "where schema_owner='" + jdbcUser + "';");
                     break;
                 case JdbcResource.ORACLE:
-                    rs = stmt.executeQuery("SELECT DISTINCT owner FROM all_tables;");
+                    rs = stmt.executeQuery("SELECT DISTINCT OWNER FROM all_tables");
                     break;
                 default:
                     throw new JdbcClientException("Not supported jdbc type");
@@ -196,6 +196,7 @@ public class JdbcClient {
                     rs = databaseMetaData.getTables(dbName, null, null, types);
                     break;
                 case JdbcResource.POSTGRESQL:
+                case JdbcResource.ORACLE:
                     rs = databaseMetaData.getTables(null, dbName, null, types);
                     break;
                 default:
