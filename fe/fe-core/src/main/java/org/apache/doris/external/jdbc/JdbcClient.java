@@ -326,6 +326,8 @@ public class JdbcClient {
                 return mysqlTypeToDoris(fieldSchema);
             case JdbcResource.POSTGRESQL:
                 return postgresqlTypeToDoris(fieldSchema);
+            case JdbcResource.ORACLE:
+                return oracleTypeToDoris(fieldSchema);
             default:
                 throw new JdbcClientException("Unknown database type");
         }
@@ -486,6 +488,64 @@ public class JdbcClient {
             case "varbit":
             case "jsonb":
             case "uuid":
+                return ScalarType.createStringType();
+            default:
+                return Type.UNSUPPORTED;
+        }
+    }
+
+    public Type oracleTypeToDoris(JdbcFieldSchema fieldSchema) {
+        String oracleType = fieldSchema.getDataTypeName();
+        if (oracleType.startsWith("INTERVAL")) {
+            oracleType = oracleType.substring(0, 8);
+        } else if (oracleType.startsWith("TIMESTAMP")) {
+            oracleType = oracleType.substring(0, 9);
+        }
+        switch (oracleType) {
+            case "NUMBER":
+                int precision = fieldSchema.getColumnSize();
+                int scale = fieldSchema.getDecimalDigits();
+                if (scale == 0) {
+                    if (precision <= 3) {
+                        return Type.TINYINT;
+                    } else if (precision <= 5) {
+                        return Type.SMALLINT;
+                    } else if (precision <= 10) {
+                        return Type.INT;
+                    } else if (precision <= 19) {
+                        return Type.BIGINT;
+                    }
+                }
+                if (precision <= ScalarType.MAX_DECIMAL128_PRECISION) {
+                    if (!Config.enable_decimal_conversion && precision > ScalarType.MAX_DECIMALV2_PRECISION) {
+                        return ScalarType.createStringType();
+                    }
+                    return ScalarType.createDecimalType(precision, scale);
+                } else {
+                    return ScalarType.createStringType();
+                }
+            case "VARCHAR2":
+            case "NVARCHAR2":
+                ScalarType varcharType = ScalarType.createVarcharType(fieldSchema.columnSize);
+                return varcharType;
+            case "CHAR":
+            case "NCHAR":
+                ScalarType charType = ScalarType.createCharType(fieldSchema.columnSize);
+                return charType;
+            case "DATE":
+                return ScalarType.getDefaultDateType(Type.DATE);
+            case "TIMESTAMP":
+                return ScalarType.getDefaultDateType(Type.DATETIME);
+            case "FLOAT":
+            case "BINARY_FLOAT":
+            case "BINARY_DOUBLE":
+                return ScalarType.createStringType();
+            case "RAW":
+            case "BLOB":
+            case "CLOB":
+            case "NCLOB":
+            case "BFILE":
+            case "INTERVAL":
                 return ScalarType.createStringType();
             default:
                 return Type.UNSUPPORTED;
