@@ -506,13 +506,13 @@ public class JdbcClient {
                 int precision = fieldSchema.getColumnSize();
                 int scale = fieldSchema.getDecimalDigits();
                 if (scale == 0) {
-                    if (precision <= 3) {
+                    if (precision < 3) {
                         return Type.TINYINT;
-                    } else if (precision <= 5) {
+                    } else if (precision < 5) {
                         return Type.SMALLINT;
-                    } else if (precision <= 10) {
+                    } else if (precision < 10) {
                         return Type.INT;
-                    } else if (precision <= 19) {
+                    } else if (precision < 19) {
                         return Type.BIGINT;
                     }
                 }
@@ -534,12 +534,12 @@ public class JdbcClient {
                 return charType;
             case "DATE":
                 return ScalarType.getDefaultDateType(Type.DATE);
-            case "TIMESTAMP":
-                return ScalarType.getDefaultDateType(Type.DATETIME);
             case "FLOAT":
             case "BINARY_FLOAT":
             case "BINARY_DOUBLE":
                 return ScalarType.createStringType();
+            case "LONG":
+            case "TIMESTAMP":
             case "RAW":
             case "BLOB":
             case "CLOB":
