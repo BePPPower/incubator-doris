@@ -503,6 +503,7 @@ public class JdbcClient {
         }
         switch (oracleType) {
             case "NUMBER":
+            case "FLOAT":
                 int precision = fieldSchema.getColumnSize();
                 int scale = fieldSchema.getDecimalDigits();
                 if (scale == 0) {
@@ -537,19 +538,19 @@ public class JdbcClient {
                 return charType;
             case "DATE":
                 return ScalarType.getDefaultDateType(Type.DATETIME);
-            case "FLOAT":
             case "BINARY_FLOAT":
+                return Type.FLOAT;
             case "BINARY_DOUBLE":
-                return ScalarType.createStringType();
+                return Type.DOUBLE;
             case "LONG":
-            case "TIMESTAMP":
             case "RAW":
+            case "INTERVAL":
+                return ScalarType.createStringType();
+            case "TIMESTAMP":
             case "BLOB":
             case "CLOB":
             case "NCLOB":
             case "BFILE":
-            case "INTERVAL":
-                return ScalarType.createStringType();
             default:
                 return Type.UNSUPPORTED;
         }
