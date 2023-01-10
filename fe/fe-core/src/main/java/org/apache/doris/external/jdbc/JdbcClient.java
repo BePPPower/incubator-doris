@@ -514,7 +514,10 @@ public class JdbcClient {
                         return Type.INT;
                     } else if (precision < 19) {
                         return Type.BIGINT;
+                    } else if (Config.enable_decimal_conversion && precision < ScalarType.MAX_DECIMAL128_PRECISION) {
+                        return ScalarType.createDecimalV3Type(precision, 0);
                     }
+                    return ScalarType.createStringType();
                 }
                 if (precision <= ScalarType.MAX_DECIMAL128_PRECISION) {
                     if (!Config.enable_decimal_conversion && precision > ScalarType.MAX_DECIMALV2_PRECISION) {
@@ -533,7 +536,7 @@ public class JdbcClient {
                 ScalarType charType = ScalarType.createCharType(fieldSchema.columnSize);
                 return charType;
             case "DATE":
-                return ScalarType.getDefaultDateType(Type.DATE);
+                return ScalarType.getDefaultDateType(Type.DATETIME);
             case "FLOAT":
             case "BINARY_FLOAT":
             case "BINARY_DOUBLE":
