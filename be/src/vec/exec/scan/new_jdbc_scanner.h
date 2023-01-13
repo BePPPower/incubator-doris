@@ -25,6 +25,8 @@ namespace doris {
 namespace vectorized {
 class NewJdbcScanner : public VScanner {
 public:
+    friend class JdbcConnector;
+
     NewJdbcScanner(RuntimeState* state, NewJdbcScanNode* parent, int64_t limit,
                    const TupleId& tuple_id, const std::string& query_string,
                    TOdbcTableType::type table_type, RuntimeProfile* profile);
@@ -37,7 +39,14 @@ public:
 protected:
     Status _get_block_impl(RuntimeState* state, Block* block, bool* eos) override;
 
+    RuntimeProfile::Counter* _load_jar_timer = nullptr;
+    RuntimeProfile::Counter* _init_connector_timer = nullptr;
+    RuntimeProfile::Counter* _get_data_timer = nullptr;
+    RuntimeProfile::Counter* _check_type_timer = nullptr;
+
 private:
+    std::unique_ptr<RuntimeProfile> _jdbc_connector_profile;
+
     bool _is_init;
 
     bool _jdbc_eos;
