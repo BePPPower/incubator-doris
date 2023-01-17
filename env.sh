@@ -20,6 +20,8 @@
 # check DORIS_HOME
 export LC_ALL=C
 
+DORIS_HOME=/mnt/datadisk1/fangtiewei/projects/doris
+
 if [[ -z "${DORIS_HOME}" ]]; then
     echo "Error: DORIS_HOME is not set"
     exit 1

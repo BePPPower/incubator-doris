@@ -23,11 +23,11 @@ defaultDb = "regression_test"
 // add useLocalSessionState so that the jdbc will not send
 // init cmd like: select @@session.tx_read_only
 // at each time we connect.
-jdbcUrl = "jdbc:mysql://127.0.0.1:9030/?useLocalSessionState=true"
+jdbcUrl = "jdbc:mysql://127.0.0.1:9139/?useLocalSessionState=true"
 jdbcUser = "root"
 jdbcPassword = ""
 
-feHttpAddress = "127.0.0.1:8030"
+feHttpAddress = "127.0.0.1:8139"
 feHttpUser = "root"
 feHttpPassword = ""
 
@@ -70,7 +70,7 @@ sk=""
 // jdbc connector test config
 // To enable jdbc test, you need first start mysql/pg container.
 // See `docker/thirdparties/start-thirdparties-docker.sh`
-enableJdbcTest=false
+enableJdbcTest=true
 mysql_57_port=3316
 pg_14_port=5442
 oracle_11_port=1521
@@ -78,9 +78,9 @@ oracle_11_port=1521
 // hive catalog test config
 // To enable jdbc test, you need first start hive container.
 // See `docker/thirdparties/start-thirdparties-docker.sh`
-enableHiveTest=false
-hms_port=9183
-hdfs_port=8120
+enableHiveTest=true
+hms_port=7004
+hdfs_port=8424
 
 // elasticsearch catalog test config
 // See `docker/thirdparties/start-thirdparties-docker.sh`
@@ -91,11 +91,11 @@ es_8_port=39200
 
 
 //hive  catalog test config for bigdata
-enableExternalHiveTest = false
-extHiveHmsHost = "***.**.**.**"
+enableExternalHiveTest = true
+extHiveHmsHost = "172.21.16.47"
 extHiveHmsPort = 7004
-extHiveHmsUser = "****"
-extHiveHmsPassword= "***********"
+extHiveHmsUser = "root"
+extHiveHmsPassword= "Cfplhys@2022"
 
 //mysql jdbc connector test config for bigdata
 enableExternalMysqlTest = false
@@ -120,4 +120,5 @@ extEsPassword = "***********"
 
 s3Endpoint = "cos.ap-hongkong.myqcloud.com"
 s3BucketName = "doris-build-hk-1308700295"
+
 s3Region = "ap-hongkong"

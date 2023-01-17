@@ -305,6 +305,7 @@ suite("test_external_brown", "p2") {
 
         logger.info("use multi_catalog")
 
+        Date dt1 = new Date();
         for (String format in formats) {
             logger.info("Process format " + format)
             qt_01 CPUNetworkUtilization_order.replace("SUFFIX", format)
@@ -323,6 +324,8 @@ suite("test_external_brown", "p2") {
             qt_14 temperatureReachFreezing.replace("SUFFIX", format)
             order_qt_15 temperatureVariation_order.replace("SUFFIX", format)
         }
+        Date dt2 = new Date();
+        logger.info("--ftw: cost time = " + ((dt2.getTime() - dt1.getTime()) / 1000))
     }
 }
 

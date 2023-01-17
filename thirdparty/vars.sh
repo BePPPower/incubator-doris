@@ -47,7 +47,7 @@ export TP_LIB_DIR="${TP_INSTALL_DIR}/lib"
 export TP_JAR_DIR="${TP_INSTALL_DIR}/lib/jar"
 
 # source of all dependencies, default unuse it
-# export REPOSITORY_URL=
+export REPOSITORY_URL=https://doris-thirdparty-hk-1308700295.cos.ap-hongkong.myqcloud.com/thirdparty
 
 #####################################################
 # Download url, filename and unpaced filename
