@@ -22,6 +22,7 @@
 
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
+#include "runtime/define_primitive_type.h"
 #include "util/thrift_rpc_helper.h"
 #include "vec/runtime/vdatetime_value.h"
 
@@ -126,6 +127,18 @@ Status VMetaScanner::_fill_block_with_remote_data(const std::vector<MutableColum
                         ->insert_value(data);
                 break;
             }
+            case TYPE_FLOAT: {
+                double data = _batch_data[_row_idx].column_value[col_idx].doubleVal;
+                reinterpret_cast<vectorized::ColumnVector<vectorized::Float32>*>(col_ptr)
+                        ->insert_value(data);
+                break;
+            }
+            case TYPE_DOUBLE: {
+                double data = _batch_data[_row_idx].column_value[col_idx].doubleVal;
+                reinterpret_cast<vectorized::ColumnVector<vectorized::Float64>*>(col_ptr)
+                        ->insert_value(data);
+                break;
+            }
             case TYPE_DATETIMEV2: {
                 uint64_t data = _batch_data[_row_idx].column_value[col_idx].longVal;
                 reinterpret_cast<vectorized::ColumnVector<vectorized::UInt64>*>(col_ptr)
@@ -210,4 +223,5 @@ Status VMetaScanner::close(RuntimeState* state) {
     RETURN_IF_ERROR(VScanner::close(state));
     return Status::OK();
 }
+
 } // namespace doris::vectorized
