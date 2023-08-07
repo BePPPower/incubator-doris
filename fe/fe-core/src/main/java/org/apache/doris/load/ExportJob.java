@@ -88,7 +88,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ExportJob implements Writable {
     private static final String BROKER_PROPERTY_PREFIXES = "broker.";
 
-    public static final MemoryTaskRegister register = new ExportTaskRegister(Env.getCurrentEnv().getAsyncJobManager());
+    public static final MemoryTaskRegister register = new ExportTaskRegister(
+            Env.getCurrentEnv().getMemoryTaskManager());
 
     @SerializedName("id")
     private long id;
