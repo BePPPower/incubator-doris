@@ -69,8 +69,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -84,10 +85,13 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 @Data
 public class ExportJob implements Writable {
+    private static final Logger LOG = LogManager.getLogger(ExportJob.class);
+
     private static final String BROKER_PROPERTY_PREFIXES = "broker.";
+
+    private static final int MAXIMUM_TABLETS_OF_OUTFILE_IN_EXPORT = Config.maximum_tablets_of_outfile_in_export;
 
     public static final TransientTaskRegister register = new ExportTaskRegister(
             Env.getCurrentEnv().getMemoryTaskManager());
@@ -163,7 +167,10 @@ public class ExportJob implements Writable {
     private Map<String, Long> partitionToVersion = Maps.newHashMap();
 
     // The selectStmt is sql 'select ... into outfile ...'
+    // TODO(ftw): delete
     private List<SelectStmt> selectStmtList = Lists.newArrayList();
+
+    private List<List<SelectStmt>> selectStmtListPerParallel = Lists.newArrayList();
 
     private List<StmtExecutor> stmtExecutorList;
 
@@ -217,6 +224,17 @@ public class ExportJob implements Writable {
         this.id = jobId;
     }
 
+    /**
+     * For an ExportJob:
+     * The ExportJob is divided into multiple 'ExportTaskExecutor'
+     * according to the 'parallelism' set by the user.
+     * The tablets which will be exported by this ExportJob are divided into 'parallelism' copies,
+     * and each ExportTaskExecutor is responsible for a list of tablets.
+     * The tablets responsible for an ExportTaskExecutor will be assigned to multiple OutfileStmt
+     * according to the 'TABLETS_NUM_PER_OUTFILE_IN_EXPORT'.
+     *
+     * @throws UserException
+     */
     public void analyze() throws UserException {
         exportTable.readLock();
         try {
@@ -229,14 +247,16 @@ public class ExportJob implements Writable {
 
     public void generateExportJobExecutor() {
         jobExecutorList = Lists.newArrayList();
-        for (int i = 0; i < selectStmtList.size(); i++) {
-            List<SelectStmt> selectStmts = Lists.newArrayList();
-            selectStmts.add(selectStmtList.get(i));
-            ExportTaskExecutor executor = new ExportTaskExecutor(selectStmts, this);
+        for (List<SelectStmt> selectStmtList : selectStmtListPerParallel) {
+            ExportTaskExecutor executor = new ExportTaskExecutor(selectStmtList, this);
             jobExecutorList.add(executor);
         }
     }
 
+    /**
+     * Generate outfile select stmt
+     * @throws UserException
+     */
     private void generateQueryStmt() throws UserException {
         SelectList list = new SelectList();
         if (exportColumns.isEmpty()) {
@@ -252,39 +272,68 @@ public class ExportJob implements Writable {
             }
         }
 
-        ArrayList<ArrayList<TableRef>> tableRefListPerQuery = splitTablets();
-        log.info("Export task is split into {} outfile statements.", tableRefListPerQuery.size());
+        ArrayList<ArrayList<TableRef>> tableRefListPerParallel = getTableRefListPerParallel();
+        LOG.info("Export Job [{}] is split into {} Export Task Executor.", id, tableRefListPerParallel.size());
 
-        // debug log output
-        if (log.isDebugEnabled()) {
-            for (int i = 0; i < tableRefListPerQuery.size(); i++) {
-                log.debug("Outfile clause {} is responsible for tablets: {}", i,
-                        tableRefListPerQuery.get(i).get(0).getSampleTabletIds());
+        // debug LOG output
+        if (LOG.isDebugEnabled()) {
+            for (int i = 0; i < tableRefListPerParallel.size(); i++) {
+                LOG.info("ExportTaskExecutor {} is responsible for tablets:", i);
+                for (TableRef tableRef : tableRefListPerParallel.get(i)) {
+                    LOG.info("Tablet id: [{}]", tableRef.getSampleTabletIds());
+                }
             }
         }
 
         // generate 'select..outfile..' statement
-        for (ArrayList<TableRef> tableRefList : tableRefListPerQuery) {
-            FromClause fromClause = new FromClause(tableRefList);
-            // generate outfile clause
-            OutFileClause outfile = new OutFileClause(this.exportPath, this.format, convertOutfileProperties());
-            SelectStmt selectStmt = new SelectStmt(list, fromClause, this.whereExpr, null,
-                    null, null, LimitElement.NO_LIMIT);
-            selectStmt.setOutFileClause(outfile);
-            selectStmt.setOrigStmt(new OriginStatement(selectStmt.toSql(), 0));
-            selectStmtList.add(selectStmt);
+        for (ArrayList<TableRef> tableRefList : tableRefListPerParallel) {
+            List<SelectStmt> selectStmtLists = Lists.newArrayList();
+            for (TableRef tableRef : tableRefList) {
+                ArrayList<TableRef> tmpTableRefList = Lists.newArrayList(tableRef);
+                FromClause fromClause = new FromClause(tmpTableRefList);
+                // generate outfile clause
+                OutFileClause outfile = new OutFileClause(this.exportPath, this.format, convertOutfileProperties());
+                SelectStmt selectStmt = new SelectStmt(list, fromClause, this.whereExpr, null,
+                        null, null, LimitElement.NO_LIMIT);
+                selectStmt.setOutFileClause(outfile);
+                selectStmt.setOrigStmt(new OriginStatement(selectStmt.toSql(), 0));
+                selectStmtLists.add(selectStmt);
+            }
+            selectStmtListPerParallel.add(selectStmtLists);
         }
-        stmtExecutorList = Arrays.asList(new StmtExecutor[selectStmtList.size()]);
 
-        // debug log output
-        if (log.isDebugEnabled()) {
-            for (int i = 0; i < selectStmtList.size(); i++) {
-                log.debug("Outfile clause {} is: {}", i, selectStmtList.get(i).toSql());
+        // debug LOG output
+        if (LOG.isDebugEnabled()) {
+            for (int i = 0; i < selectStmtListPerParallel.size(); ++i) {
+                LOG.debug("ExportTaskExecutor {} is responsible for outfile:", i);
+                for (SelectStmt outfile : selectStmtListPerParallel.get(i)) {
+                    LOG.debug("outfile sql: [{}]", outfile.toSql());
+                }
             }
         }
     }
 
-    private ArrayList<ArrayList<TableRef>> splitTablets() throws UserException {
+    private ArrayList<ArrayList<TableRef>> getTableRefListPerParallel() throws UserException {
+        ArrayList<ArrayList<Long>> tabletsListPerParallel = splitTablets();
+
+        ArrayList<ArrayList<TableRef>> tableRefListPerParallel = Lists.newArrayList();
+        for (ArrayList<Long> tabletsList : tabletsListPerParallel) {
+            ArrayList<TableRef> tableRefList = Lists.newArrayList();
+            for (int i = 0; i < tabletsList.size(); i += MAXIMUM_TABLETS_OF_OUTFILE_IN_EXPORT) {
+                int end = i + MAXIMUM_TABLETS_OF_OUTFILE_IN_EXPORT < tabletsList.size()
+                        ? i + MAXIMUM_TABLETS_OF_OUTFILE_IN_EXPORT : tabletsList.size();
+                ArrayList<Long> tablets = new ArrayList<>(tabletsList.subList(i, end));
+                TableRef tblRef = new TableRef(this.tableRef.getName(), this.tableRef.getAlias(),
+                        this.tableRef.getPartitionNames(), tablets,
+                        this.tableRef.getTableSample(), this.tableRef.getCommonHints());
+                tableRefList.add(tblRef);
+            }
+            tableRefListPerParallel.add(tableRefList);
+        }
+        return tableRefListPerParallel;
+    }
+
+    private ArrayList<ArrayList<Long>> splitTablets() throws UserException {
         // get tablets
         Database db = Env.getCurrentEnv().getInternalCatalog().getDbOrAnalysisException(this.tableName.getDb());
         OlapTable table = db.getOlapTableOrAnalysisException(this.tableName.getTbl());
@@ -317,32 +366,28 @@ public class ExportJob implements Writable {
         }
 
         Integer tabletsAllNum = tabletIdList.size();
-        Integer tabletsNumPerQuery = tabletsAllNum / this.parallelism;
-        Integer tabletsNumPerQueryRemainder = tabletsAllNum - tabletsNumPerQuery * this.parallelism;
+        Integer tabletsNumPerParallel = tabletsAllNum / this.parallelism;
+        Integer tabletsNumPerQueryRemainder = tabletsAllNum - tabletsNumPerParallel * this.parallelism;
 
-        ArrayList<ArrayList<TableRef>> tableRefListPerQuery = Lists.newArrayList();
+        ArrayList<ArrayList<Long>> tabletsListPerParallel = Lists.newArrayList();
         int outfileNum = this.parallelism;
         if (tabletsAllNum < this.parallelism) {
             outfileNum = tabletsAllNum;
-            log.warn("The number of tablets is smaller than parallelism, set parallelism to tablets num.");
+            LOG.warn("The number of tablets is smaller than parallelism, set parallelism to tablets num.");
         }
         Integer start = 0;
         for (int i = 0; i < outfileNum; ++i) {
-            Integer tabletsNum = tabletsNumPerQuery;
+            Integer tabletsNum = tabletsNumPerParallel;
             if (tabletsNumPerQueryRemainder > 0) {
                 tabletsNum = tabletsNum + 1;
                 --tabletsNumPerQueryRemainder;
             }
             ArrayList<Long> tablets = new ArrayList<>(tabletIdList.subList(start, start + tabletsNum));
             start += tabletsNum;
-            TableRef tblRef = new TableRef(this.tableRef.getName(), this.tableRef.getAlias(),
-                    this.tableRef.getPartitionNames(), tablets,
-                    this.tableRef.getTableSample(), this.tableRef.getCommonHints());
-            ArrayList<TableRef> tableRefList = Lists.newArrayList();
-            tableRefList.add(tblRef);
-            tableRefListPerQuery.add(tableRefList);
+
+            tabletsListPerParallel.add(tablets);
         }
-        return tableRefListPerQuery;
+        return tabletsListPerParallel;
     }
 
     private Map<String, String> convertOutfileProperties() {
@@ -418,7 +463,7 @@ public class ExportJob implements Writable {
             // Status releaseSnapshotStatus = releaseSnapshotPaths();
             // if (!releaseSnapshotStatus.ok()) {
             //     // snapshot will be removed by GC thread on BE, finally.
-            //     log.warn("failed to release snapshot for export job: {}. err: {}", id,
+            //     LOG.warn("failed to release snapshot for export job: {}. err: {}", id,
             //             releaseSnapshotStatus.getErrorMsg());
             // }
         }
@@ -467,7 +512,7 @@ public class ExportJob implements Writable {
             try {
                 register.cancelTask(id);
             } catch (JobException e) {
-                log.warn("cancel export task {} exception: {}", id, e);
+                LOG.warn("cancel export task {} exception: {}", id, e);
             }
         });
 
@@ -497,7 +542,7 @@ public class ExportJob implements Writable {
             return;
         }
         setExportJobState(ExportJobState.EXPORTING);
-        // if isReplay == true, startTimeMs will be read from log
+        // if isReplay == true, startTimeMs will be read from LOG
         startTimeMs = System.currentTimeMillis();
     }
 
@@ -577,7 +622,7 @@ public class ExportJob implements Writable {
                 progress = 0;
                 break;
             case EXPORTING:
-                // if isReplay == true, startTimeMs will be read from log
+                // if isReplay == true, startTimeMs will be read from LOG
                 if (!isReplay) {
                     startTimeMs = System.currentTimeMillis();
                 }
@@ -589,7 +634,7 @@ public class ExportJob implements Writable {
                 progress = 100;
                 break;
             case CANCELLED:
-                // if isReplay == true, finishTimeMs will be read from log
+                // if isReplay == true, finishTimeMs will be read from LOG
                 if (!isReplay) {
                     finishTimeMs = System.currentTimeMillis();
                 }

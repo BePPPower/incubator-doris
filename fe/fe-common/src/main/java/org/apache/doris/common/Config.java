@@ -2069,4 +2069,9 @@ public class Config extends ConfigBase {
             "Export任务允许的最大并行数",
             "The maximum parallelism allowed by Export job"})
     public static int maximum_parallelism_of_export_job = 50;
+
+    @ConfField(mutable = true, description = {
+            "ExportExecutorTask任务中一个OutFile语句允许的最大tablets数量",
+            "The maximum number of tablets allowed by an OutfileStatement in an ExportExecutorTask"})
+    public static int maximum_tablets_of_outfile_in_export = 10;
 }
