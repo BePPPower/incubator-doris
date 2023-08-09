@@ -377,7 +377,7 @@ public class ExportJob implements Writable {
         return state;
     }
 
-    public synchronized void setState(ExportJobState newState) {
+    private void setExportJobState(ExportJobState newState) {
         this.state = newState;
     }
 
@@ -424,12 +424,32 @@ public class ExportJob implements Writable {
         }
     }
 
+    public synchronized void updateExportJobState(ExportJobState newState, Long taskId,
+            List<OutfileInfo> outfileInfoList, ExportFailMsg.CancelType type, String msg) throws JobException {
+        switch (newState) {
+            case PENDING:
+                throw new JobException("Can not update ExportJob state to 'PENDING', job id: [{}], task id: [{}]",
+                        id, taskId);
+            case EXPORTING:
+                exportExportJob();
+                break;
+            case CANCELLED:
+                cancelExportTask(type, msg);
+                break;
+            case FINISHED:
+                finishExportTask(taskId, outfileInfoList);
+                break;
+            default:
+                return;
+        }
+    }
+
     public void cancelReplayedExportJob(ExportFailMsg.CancelType type, String msg) {
-        setState(ExportJobState.CANCELLED);
+        setExportJobState(ExportJobState.CANCELLED);
         failMsg = new ExportFailMsg(type, msg);
     }
 
-    public synchronized void cancelExportTask(ExportFailMsg.CancelType type, String msg) throws JobException {
+    private void cancelExportTask(ExportFailMsg.CancelType type, String msg) throws JobException {
         if (getState() == ExportJobState.CANCELLED) {
             return;
         }
@@ -455,7 +475,7 @@ public class ExportJob implements Writable {
     }
 
     private void cancelExportJobUnprotected(ExportFailMsg.CancelType type, String msg) {
-        setState(ExportJobState.CANCELLED);
+        setExportJobState(ExportJobState.CANCELLED);
         finishTimeMs = System.currentTimeMillis();
         failMsg = new ExportFailMsg(type, msg);
         Env.getCurrentEnv().getEditLog().logExportUpdateState(id, ExportJobState.CANCELLED);
@@ -470,18 +490,18 @@ public class ExportJob implements Writable {
         return false;
     }
 
-    public synchronized void exportExportJob() {
+    private void exportExportJob() {
         // The first exportTaskExecutor will set state to EXPORTING,
         // other exportTaskExecutors do not need to set up state.
         if (getState() == ExportJobState.EXPORTING) {
             return;
         }
-        setState(ExportJobState.EXPORTING);
+        setExportJobState(ExportJobState.EXPORTING);
         // if isReplay == true, startTimeMs will be read from log
         startTimeMs = System.currentTimeMillis();
     }
 
-    public synchronized void finishExportTask(Long taskId, List<OutfileInfo> outfileInfoList) throws JobException {
+    private void finishExportTask(Long taskId, List<OutfileInfo> outfileInfoList) throws JobException {
         if (getState() == ExportJobState.CANCELLED) {
             throw new JobException("Job [{}] has been cancelled, can not finish this task: {}", id, taskId);
         }
@@ -505,13 +525,13 @@ public class ExportJob implements Writable {
 
     private void finishExportJobUnprotected() {
         progress = 100;
-        setState(ExportJobState.FINISHED);
+        setExportJobState(ExportJobState.FINISHED);
         finishTimeMs = System.currentTimeMillis();
         outfileInfo = GsonUtils.GSON.toJson(allOutfileInfo);
         Env.getCurrentEnv().getEditLog().logExportUpdateState(id, ExportJobState.FINISHED);
     }
 
-    public synchronized void replayExportJobState(ExportJobState newState) {
+    public void replayExportJobState(ExportJobState newState) {
         switch (newState) {
             // We do not persist EXPORTING state in new version of metadata,
             // but EXPORTING state may still exist in older versions of metadata.
@@ -534,7 +554,7 @@ public class ExportJob implements Writable {
                 Preconditions.checkState(false, "wrong job state: " + newState.name());
                 break;
         }
-        setState(newState);
+        setExportJobState(newState);
     }
 
     // TODO(ftw): delete
