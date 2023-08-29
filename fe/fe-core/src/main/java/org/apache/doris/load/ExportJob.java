@@ -192,6 +192,9 @@ public class ExportJob implements Writable {
 
     private List<List<StatementBase>> selectStmtListPerParallel = Lists.newArrayList();
 
+    private List<List<String>> outfileSqlPerParallel = Lists.newArrayList();
+
+
     private List<StmtExecutor> stmtExecutorList;
 
     private List<String> exportColumns = Lists.newArrayList();
@@ -387,7 +390,7 @@ public class ExportJob implements Writable {
 
     private void generateLogicalPlanAdapter() throws UserException {
         // generate 'select...into outfile' sql
-        List<List<String>> outfileSqlPerParallel = generateOutfileSqlPerParallel();
+        generateOutfileSqlPerParallel();
         // debug outfile sql
         if (LOG.isDebugEnabled()) {
             for (int i = 0; i < outfileSqlPerParallel.size(); ++i) {
@@ -442,11 +445,10 @@ public class ExportJob implements Writable {
         });
     }
 
-    private List<List<String>> generateOutfileSqlPerParallel() throws UserException {
+    private void generateOutfileSqlPerParallel() throws UserException {
         // get all tablets
         List<List<Long>> tabletsListPerParallel = splitTablets();
 
-        List<List<String>> outfileSqlPerParallel = Lists.newArrayList();
         for (List<Long> tabletsList : tabletsListPerParallel) {
             List<String> outfileSqlList = Lists.newArrayList();
             for (int i = 0; i < tabletsList.size(); i += MAXIMUM_TABLETS_OF_OUTFILE_IN_EXPORT) {
@@ -458,7 +460,6 @@ public class ExportJob implements Writable {
             }
             outfileSqlPerParallel.add(outfileSqlList);
         }
-        return outfileSqlPerParallel;
     }
 
     private String generateSelectSql(List<Long> tablets) {
@@ -513,7 +514,7 @@ public class ExportJob implements Writable {
     private StringBuilder generateWhereSql() {
         StringBuilder sb = new StringBuilder();
         if (whereSql != null) {
-            sb.append(" ").append(whereSql).append(" ");
+            sb.append(" ").append(whereSql);
         }
         return sb;
     }
@@ -605,6 +606,11 @@ public class ExportJob implements Writable {
             table.readUnlock();
         }
 
+        /**
+         * Assign tablets to per parallel, for example:
+         * If the number of all tablets if 10, and the real parallelism is 4,
+         * then, the number of tablets of per parallel should be: 3 3 2 2.
+         */
         Integer tabletsAllNum = tabletIdList.size();
         tabletsNum = tabletsAllNum;
         Integer tabletsNumPerParallel = tabletsAllNum / this.parallelism;
