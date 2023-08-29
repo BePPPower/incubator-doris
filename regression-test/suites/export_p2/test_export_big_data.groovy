@@ -22,6 +22,11 @@ import java.nio.file.Files
 import java.nio.file.Paths
 
 suite("test_export_big_data", "p2") {
+    // open nereids
+    sql """ set enable_nereids_planner=true """
+    sql """ set enable_fallback_to_original_planner=false """
+
+
     // check whether the FE config 'enable_outfile_to_local' is true
     StringBuilder strBuilder = new StringBuilder()
     strBuilder.append("curl --location-trusted -u " + context.config.jdbcUser + ":" + context.config.jdbcPassword)
@@ -98,9 +103,9 @@ suite("test_export_big_data", "p2") {
         if (res[0][2] == "FINISHED") {
             def json = parseJson(res[0][11])
             assert json instanceof List
-            assertEquals("1", json.fileNumber[0])
-            log.info("outfile_path: ${json.url[0]}")
-            return json.url[0];
+            assertEquals("1", json.fileNumber[0][0])
+            log.info("outfile_path: ${json.url[0][0]}")
+            return json.url[0][0];
         } else if (res[0][2] == "CANCELLED") {
             throw new IllegalStateException("""export failed: ${res[0][10]}""")
         } else {
