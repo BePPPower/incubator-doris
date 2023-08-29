@@ -32,7 +32,6 @@ import org.apache.doris.nereids.trees.plans.commands.ExportCommand;
 import org.apache.doris.nereids.trees.plans.logical.LogicalPlan;
 import org.apache.doris.utframe.TestWithFeService;
 
-import com.clearspring.analytics.util.Lists;
 import mockit.Mock;
 import mockit.MockUp;
 import org.antlr.v4.runtime.CharStreams;
@@ -45,6 +44,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -837,7 +837,7 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
     private List<List<String>> getOutfileSqlPerParallel(String exportSql) throws UserException {
         ExportCommand plan = (ExportCommand) parseSql(exportSql);
         Analyzer analyzer = new Analyzer(connectContext.getEnv(), connectContext);
-        List<List<String>> outfileSqlPerParallel = Lists.newArrayList();
+        List<List<String>> outfileSqlPerParallel = new ArrayList<>();
         try {
             Method privateMethod = plan.getClass().getDeclaredMethod("generateExportStmt");
             privateMethod.setAccessible(true);
