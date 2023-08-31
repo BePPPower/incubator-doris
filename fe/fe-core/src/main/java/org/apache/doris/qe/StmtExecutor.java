@@ -2186,7 +2186,7 @@ public class StmtExecutor {
     private void handleExportStmt() throws Exception {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         // context.getEnv().getExportMgr().addExportJob(exportStmt);
-        context.getEnv().getExportMgr().addExportJobAndRegisterTask(exportStmt);
+        context.getEnv().getExportMgr().addExportJobAndRegisterTask(exportStmt.getExportJob());
     }
 
     private void handleCtasStmt() {
