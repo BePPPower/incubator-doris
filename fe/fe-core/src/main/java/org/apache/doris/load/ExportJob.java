@@ -42,7 +42,8 @@ import org.apache.doris.catalog.MaterializedIndex;
 import org.apache.doris.catalog.MaterializedIndex.IndexExtState;
 import org.apache.doris.catalog.OlapTable;
 import org.apache.doris.catalog.Partition;
-import org.apache.doris.catalog.Table;
+import org.apache.doris.catalog.TableIf;
+import org.apache.doris.catalog.TableIf.TableType;
 import org.apache.doris.common.Config;
 import org.apache.doris.common.FeMetaVersion;
 import org.apache.doris.common.Pair;
@@ -51,7 +52,6 @@ import org.apache.doris.common.io.Text;
 import org.apache.doris.common.io.Writable;
 import org.apache.doris.common.util.SqlParserUtils;
 import org.apache.doris.common.util.TimeUtils;
-import org.apache.doris.datasource.InternalCatalog;
 import org.apache.doris.nereids.parser.NereidsParser;
 import org.apache.doris.persist.gson.GsonUtils;
 import org.apache.doris.qe.OriginStatement;
@@ -83,7 +83,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Data
 public class ExportJob implements Writable {
@@ -185,7 +184,7 @@ public class ExportJob implements Writable {
 
     private List<String> exportColumns = Lists.newArrayList();
 
-    private Table exportTable;
+    private TableIf exportTable;
 
     // when set to true, means this job instance is created by replay thread(FE restarted or master changed)
     private boolean isReplayed = false;
@@ -240,10 +239,21 @@ public class ExportJob implements Writable {
      * @throws UserException
      */
     public void generateOutfile() throws UserException {
+        String catalogType = Env.getCurrentEnv().getCatalogMgr().getCatalog(this.tableName.getCtl()).getType();
         exportTable.readLock();
         try {
             // generateQueryStmtOld
             if (sessionVariables.isEnableNereidsPlanner()) {
+                if ("internal".equals(catalogType)) {
+                    if (exportTable.getType() == TableType.VIEW) {
+                        generateViewOrExternalTableOutfileSql();
+                    } else {
+                        // generate 'select...into outfile' sql
+                        generateOutfileSqlPerParallel();
+                    }
+                } else {
+                    generateViewOrExternalTableOutfileSql();
+                }
                 generateLogicalPlanAdapter();
             } else {
                 generateQueryStmt();
@@ -374,9 +384,7 @@ public class ExportJob implements Writable {
         }
     }
 
-    private void generateLogicalPlanAdapter() throws UserException {
-        // generate 'select...into outfile' sql
-        generateOutfileSqlPerParallel();
+    private void generateLogicalPlanAdapter() {
         // debug outfile sql
         if (LOG.isDebugEnabled()) {
             for (int i = 0; i < outfileSqlPerParallel.size(); ++i) {
@@ -415,6 +423,21 @@ public class ExportJob implements Writable {
         }
     }
 
+    /**
+     * This method used to generate outfile sql for view table or external table.
+     * @throws UserException
+     */
+    private void generateViewOrExternalTableOutfileSql() {
+        // Because there is no division of tablets in view and external table
+        // we set parallelism = 1;
+        this.parallelism = 1;
+        LOG.info("Because there is no division of tablets in view and external table, we set parallelism = 1");
+        List<String> outfileSqlList = Lists.newArrayList();
+        String outfileSql = generateSelectSql(Lists.newArrayList());
+        outfileSqlList.add(outfileSql);
+        outfileSqlPerParallel.add(outfileSqlList);
+    }
+
     private String generateSelectSql(List<Long> tablets) {
         StringBuilder selectSql = new StringBuilder();
         selectSql.append("SELECT ").append(generateColumnSql())
@@ -444,7 +467,7 @@ public class ExportJob implements Writable {
 
     private StringBuilder generateFromSql(List<Long> tablets) {
         StringBuilder fromSqlString = new StringBuilder();
-        if (tableName.getCtl() != null && !tableName.getCtl().equals(InternalCatalog.INTERNAL_CATALOG_NAME)) {
+        if (tableName.getCtl() != null) {
             fromSqlString.append("`").append(tableName.getCtl()).append("`").append(".");
         }
         if (tableName.getDb() != null) {
@@ -453,14 +476,16 @@ public class ExportJob implements Writable {
         fromSqlString.append("`").append(tableName.getTbl()).append("`");
 
         // set tablets
-        fromSqlString.append(" ").append("TABLET(");
-        for (int i = 0; i < tablets.size(); ++i) {
-            if (i != 0) {
-                fromSqlString.append(", ");
+        if (!tablets.isEmpty()) {
+            fromSqlString.append(" ").append("TABLET(");
+            for (int i = 0; i < tablets.size(); ++i) {
+                if (i != 0) {
+                    fromSqlString.append(", ");
+                }
+                fromSqlString.append(tablets.get(i));
             }
-            fromSqlString.append(tablets.get(i));
+            fromSqlString.append(")");
         }
-        fromSqlString.append(")");
         return fromSqlString;
     }
 

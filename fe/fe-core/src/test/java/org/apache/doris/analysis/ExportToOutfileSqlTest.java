@@ -84,22 +84,22 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 1 array, and there should be 4 outfile sql in this array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014, 10016, 10018, 10020, 10022, 10024, 10026, 10028) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql2 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10030, 10032, 10034, 10036, 10038, 10040, 10042, 10044, 10046, 10048) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql3 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql3 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10050, 10052, 10054, 10056, 10058, 10060, 10062, 10064, 10066, 10068) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql4 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql4 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10070, 10072, 10074, 10076, 10078, 10080, 10082, 10084, 10086, 10088) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
@@ -139,22 +139,22 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 4 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014, 10016, 10018, 10020, 10022, 10024, 10026, 10028) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql2 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10030, 10032, 10034, 10036, 10038, 10040, 10042, 10044, 10046, 10048) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql3 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql3 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10050, 10052, 10054, 10056, 10058, 10060, 10062, 10064, 10066, 10068) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql4 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql4 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10070, 10072, 10074, 10076, 10078, 10080, 10082, 10084, 10086, 10088) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
@@ -198,22 +198,22 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 4 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql2 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10016, 10018, 10020) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql3 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql3 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10022, 10024) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql4 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql4 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10026, 10028) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
@@ -257,22 +257,22 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 4 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014, 10016, 10018) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql2 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10020, 10022, 10024, 10026, 10028) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql3 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql3 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10070, 10072, 10074, 10076, 10078) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql4 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql4 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10080, 10082, 10084, 10086, 10088) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
@@ -318,52 +318,52 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
         // so set parallelism = num(tablets)
         // There should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql2 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10012) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql3 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql3 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10014) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql4 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql4 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10016) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql5 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql5 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10018) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql6 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql6 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10020) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql7 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql7 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10022) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql8 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql8 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10024) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql9 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql9 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10026) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql10 = "SELECT * FROM `default_cluster:testDb`.`table1` "
+        String outfileSql10 = "SELECT * FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10028) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
@@ -416,27 +416,27 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 4 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT k3, k1, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT k3, k1, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql2 = "SELECT k3, k1, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT k3, k1, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10014, 10016) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql3 = "SELECT k3, k1, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql3 = "SELECT k3, k1, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10018, 10020) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql4 = "SELECT k3, k1, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql4 = "SELECT k3, k1, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10022, 10024) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql5 = "SELECT k3, k1, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql5 = "SELECT k3, k1, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10026, 10028) "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
@@ -481,31 +481,31 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 4 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT k3, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT k3, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql2 = "SELECT k3, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT k3, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10014, 10016) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql3 = "SELECT k3, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql3 = "SELECT k3, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10018, 10020) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql4 = "SELECT k3, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql4 = "SELECT k3, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10022, 10024) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
                 + "PROPERTIES (\"column_separator\" = \"\t\", \"line_delimiter\" = \"\n"
                 + "\");";
-        String outfileSql5 = "SELECT k3, k2 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql5 = "SELECT k3, k2 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10026, 10028) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS csv "
@@ -554,13 +554,13 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 2 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014, 10016, 10018) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS orc "
                 + "PROPERTIES (\"max_file_size\" = \"512MB\""
                 + ");";
-        String outfileSql2 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10020, 10022, 10024, 10026, 10028) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"file:///tmp/exp_\" FORMAT AS orc "
@@ -625,7 +625,7 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 2 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014, 10016, 10018) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"hdfs:///tmp/exp_\" FORMAT AS orc "
@@ -635,7 +635,7 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
                 + "\"broker.password\" = \"pps\", "
                 + "\"broker.username\" = \"doris\""
                 + ");";
-        String outfileSql2 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10020, 10022, 10024, 10026, 10028) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"hdfs:///tmp/exp_\" FORMAT AS orc "
@@ -695,7 +695,7 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 2 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014, 10016, 10018) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"s3:///tmp/exp_\" FORMAT AS orc "
@@ -709,7 +709,7 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
                 + "\"AWS_SECRET_KEY\" = \"ssss\", "
                 + "\"AWS_ACCESS_KEY\" = \"aaaa\""
                 + ");";
-        String outfileSql2 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10020, 10022, 10024, 10026, 10028) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"s3:///tmp/exp_\" FORMAT AS orc "
@@ -769,7 +769,7 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
 
         // This export sql should generate 2 array, and there should be 1 outfile sql in per array.
         // The only difference between them is the TABLET(). They are:
-        String outfileSql1 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql1 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10010, 10012, 10014, 10016, 10018) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"hdfs:///tmp/exp_\" FORMAT AS orc "
@@ -778,7 +778,7 @@ public class ExportToOutfileSqlTest extends TestWithFeService {
                 + "\"max_file_size\" = \"512MB\", "
                 + "\"hadoop.username\" = \"hadoop\""
                 + ");";
-        String outfileSql2 = "SELECT k3 FROM `default_cluster:testDb`.`table1` "
+        String outfileSql2 = "SELECT k3 FROM `internal`.`default_cluster:testDb`.`table1` "
                 + "TABLET(10020, 10022, 10024, 10026, 10028) "
                 + "WHERE k1 < 3 "
                 + "INTO OUTFILE \"hdfs:///tmp/exp_\" FORMAT AS orc "
