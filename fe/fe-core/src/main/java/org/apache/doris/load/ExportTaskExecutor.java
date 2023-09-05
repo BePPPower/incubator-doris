@@ -112,8 +112,8 @@ public class ExportTaskExecutor implements TransientTaskExecutor {
                             if (nowVersion != oldVersion) {
                                 exportJob.updateExportJobState(ExportJobState.CANCELLED, taskId, null,
                                         CancelType.RUN_FAIL, "The version of tablet {" + tabletId + "} has changed");
-                                throw new JobException("Export Job[{}]: Tablet {} has changed version, old version = {}, "
-                                        + "now version = {}", exportJob.getId(), tabletId, oldVersion, nowVersion);
+                                throw new JobException("Export Job[{}]: Tablet {} has changed version, old version = {}"
+                                        + ", now version = {}", exportJob.getId(), tabletId, oldVersion, nowVersion);
                             }
                         }
                     } catch (Exception e) {
