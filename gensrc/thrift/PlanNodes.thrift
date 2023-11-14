@@ -312,6 +312,18 @@ struct TPaimonFileDesc {
     10: optional i64 last_update_time
 }
 
+struct TTrinoConnectorFileDesc {
+    1: optional string trino_connector_split
+    2: optional string trino_connector_table_handle
+    3: optional string trino_connector_column_handles
+    4: optional string trino_connector_column_metadata;
+    5: optional string trino_connector_column_names
+    6: optional string catalog_name
+    7: optional string db_name
+    8: optional string table_name
+    9: optional string trino_connector_predicate
+    10: optional map<string, string> trino_connector_options
+}
 
 struct THudiFileDesc {
     1: optional string instant_time;
@@ -342,6 +354,7 @@ struct TTableFormatFileDesc {
     3: optional THudiFileDesc hudi_params
     4: optional TPaimonFileDesc paimon_params
     5: optional TTransactionalHiveDesc transactional_hive_params
+    6: optional TTrinoConnectorFileDesc trino_connector_params
 }
 
 enum TTextSerdeType {

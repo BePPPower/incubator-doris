@@ -57,6 +57,12 @@ public:
         return GetJNIEnvSlowPath(env);
     }
 
+    static JNIEnv* getGlobalJNIEnv(void);
+
+    static JNIEnv* getGlobalJNIEnv2(void);
+
+    static JNIEnv* getJNIEnv2(void);
+
     static Status GetGlobalClassRef(JNIEnv* env, const char* class_str,
                                     jclass* class_ref) WARN_UNUSED_RESULT;
 

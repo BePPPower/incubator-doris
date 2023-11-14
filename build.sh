@@ -33,6 +33,8 @@ export DORIS_HOME="${ROOT}"
 
 . "${DORIS_HOME}/env.sh"
 
+# JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-17.0.5.jdk/Contents/Home/"
+
 # Check args
 usage() {
     echo "
@@ -471,6 +473,7 @@ if [[ "${BUILD_BE_JAVA_EXTENSIONS}" -eq 1 ]]; then
     modules+=("be-java-extensions/java-udf")
     modules+=("be-java-extensions/jdbc-scanner")
     modules+=("be-java-extensions/paimon-scanner")
+    modules+=("be-java-extensions/trino-connector-scanner")
     modules+=("be-java-extensions/max-compute-scanner")
     modules+=("be-java-extensions/avro-scanner")
     modules+=("be-java-extensions/preload-extensions")
@@ -704,6 +707,7 @@ EOF
     extensions_modules+=("jdbc-scanner")
     extensions_modules+=("hudi-scanner")
     extensions_modules+=("paimon-scanner")
+    extensions_modules+=("trino-connector-scanner")
     extensions_modules+=("max-compute-scanner")
     extensions_modules+=("avro-scanner")
     extensions_modules+=("preload-extensions")

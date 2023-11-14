@@ -16,19 +16,28 @@
    limitations under the License.
   -->
 <project version="4">
-    <component name="IssueNavigationConfiguration">
-        <option name="links">
-            <list>
-                <IssueNavigationLink>
-                    <option name="issueRegexp" value="#(\d+)" />
-                    <option name="linkRegexp" value="https://github.com/apache/doris/pull/$1" />
-                </IssueNavigationLink>
-            </list>
-        </option>
-    </component>
-    <component name="VcsDirectoryMappings">
-        <mapping directory="$PROJECT_DIR$" vcs="Git" />
-        <mapping directory="$PROJECT_DIR$/be/src/apache-orc" vcs="Git" />
-        <mapping directory="$PROJECT_DIR$/be/src/clucene" vcs="Git" />
-    </component>
+  <component name="IssueNavigationConfiguration">
+    <option name="links">
+      <list>
+        <IssueNavigationLink>
+          <option name="issueRegexp" value="#(\d+)" />
+          <option name="linkRegexp" value="https://github.com/apache/doris/pull/$1" />
+        </IssueNavigationLink>
+      </list>
+    </option>
+  </component>
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/action-pr-title" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/action-sh-checker" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/ccache-action" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/clang-format-lint-action" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/clang-tidy-review" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/get-workflow-origin" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/label-when-approved-action" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/paths-filter" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/.github/actions/setup-maven" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/be/src/apache-orc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/be/src/clucene" vcs="Git" />
+  </component>
 </project>

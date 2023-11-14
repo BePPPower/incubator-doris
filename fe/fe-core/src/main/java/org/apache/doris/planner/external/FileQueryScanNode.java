@@ -46,6 +46,8 @@ import org.apache.doris.planner.external.iceberg.IcebergScanNode;
 import org.apache.doris.planner.external.iceberg.IcebergSplit;
 import org.apache.doris.planner.external.paimon.PaimonScanNode;
 import org.apache.doris.planner.external.paimon.PaimonSplit;
+import org.apache.doris.planner.external.trino.connectors.TrinoConnectorScanNode;
+import org.apache.doris.planner.external.trino.connectors.TrinoConnectorSplit;
 import org.apache.doris.qe.ConnectContext;
 import org.apache.doris.spi.Split;
 import org.apache.doris.statistics.StatisticalType;
@@ -363,6 +365,8 @@ public abstract class FileQueryScanNode extends FileScanNode {
                 IcebergScanNode.setIcebergParams(rangeDesc, (IcebergSplit) fileSplit);
             } else if (fileSplit instanceof PaimonSplit) {
                 PaimonScanNode.setPaimonParams(rangeDesc, (PaimonSplit) fileSplit);
+            } else if (fileSplit instanceof TrinoConnectorSplit) {
+                TrinoConnectorScanNode.setTrinoConnectorParams(rangeDesc, (TrinoConnectorSplit) fileSplit);
             } else if (fileSplit instanceof HudiSplit) {
                 HudiScanNode.setHudiParams(rangeDesc, (HudiSplit) fileSplit);
             }
