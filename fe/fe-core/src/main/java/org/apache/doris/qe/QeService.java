@@ -51,12 +51,12 @@ public class QeService {
 
     public void start() throws Exception {
         // Set up help module
-        try {
-            HelpModule.getInstance().setUpModule(HelpModule.HELP_ZIP_FILE_NAME);
-        } catch (Exception e) {
-            LOG.warn("Help module failed, because:", e);
-            throw e;
-        }
+        // try {
+        //     HelpModule.getInstance().setUpModule(HelpModule.HELP_ZIP_FILE_NAME);
+        // } catch (Exception e) {
+        //     LOG.warn("Help module failed, because:", e);
+        //     throw e;
+        // }
 
         if (!mysqlServer.start()) {
             LOG.error("mysql server start failed");

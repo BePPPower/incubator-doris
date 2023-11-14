@@ -58,7 +58,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set (COMPILER_CLANG 1)
     option(ENABLE_PCH "enable pch" ON)
 endif ()
-
+SET(ENABLE_PCH OFF)
 # Set boost/stacktrace use backtrace api to unwind
 if (NOT OS_MACOSX)
     add_definitions(-DBOOST_STACKTRACE_USE_BACKTRACE)
@@ -692,20 +692,20 @@ else()
 endif()
 
 if (ENABLE_PCH)
-    add_library(pch STATIC ${SRC_DIR}pch/pch.cc)
-    target_precompile_headers(
-        pch
-        PUBLIC
-            ${SRC_DIR}pch/pch.h
-    )
-    if (COMPILER_CLANG)
-        target_compile_options(pch PRIVATE -Xclang -fno-pch-timestamp)
-    endif()
+#    add_library(pch STATIC ${SRC_DIR}pch/pch.cc)
+#    target_precompile_headers(
+#        pch
+#        PUBLIC
+#            ${SRC_DIR}pch/pch.h
+#    )
+#    if (COMPILER_CLANG)
+#        target_compile_options(pch PRIVATE -Xclang -fno-pch-timestamp)
+#    endif()
 endif()
 
 function(pch_reuse target)
     if (ENABLE_PCH)
-        target_precompile_headers(${target} REUSE_FROM pch)
+#        target_precompile_headers(${target} REUSE_FROM pch)
     endif()
 endfunction(pch_reuse target)
 
@@ -724,10 +724,12 @@ add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/udf)
 add_subdirectory(${SRC_DIR}/cloud)
 
-option(BUILD_META_TOOL "Build meta tool" OFF)
-if (BUILD_META_TOOL)
-    add_subdirectory(${SRC_DIR}/tools)
-endif()
+add_subdirectory(${SRC_DIR}/tools)
+
+#option(BUILD_META_TOOL "Build meta tool" ON)
+#if (BUILD_META_TOOL)
+#    add_subdirectory(${SRC_DIR}/tools)
+#endif()
 
 option(BUILD_INDEX_TOOL "Build index tool" OFF)
 if (BUILD_INDEX_TOOL)

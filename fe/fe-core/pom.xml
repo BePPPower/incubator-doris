@@ -753,6 +753,14 @@ under the License.
             <groupId>org.immutables</groupId>
             <artifactId>value</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.trino</groupId>
+            <artifactId>trino-main</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+        </dependency>
     </dependencies>
     <repositories>
         <!-- for huawei obs sdk -->
@@ -1026,6 +1034,10 @@ under the License.
                         </configuration>
                     </execution>
                 </executions>
+		<configuration>
+                    <source>9</source>
+                    <target>9</target>
+		</configuration>
             </plugin>
             <!-- add gensrc java build src dir -->
             <plugin>
