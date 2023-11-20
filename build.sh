@@ -33,8 +33,6 @@ export DORIS_HOME="${ROOT}"
 
 . "${DORIS_HOME}/env.sh"
 
-# JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-17.0.5.jdk/Contents/Home/"
-
 # Check args
 usage() {
     echo "
