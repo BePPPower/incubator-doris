@@ -35,11 +35,12 @@ class Block;
 
 namespace doris::vectorized {
 
-const std::string TrinoConnectorJniReader::TRINO_CONNECTOR_OPTION_PREFIX = "trino_connector_option_prefix.";
+const std::string TrinoConnectorJniReader::TRINO_CONNECTOR_OPTION_PREFIX =
+        "trino_connector_option_prefix.";
 
-TrinoConnectorJniReader::TrinoConnectorJniReader(const std::vector<SlotDescriptor*>& file_slot_descs,
-                                 RuntimeState* state, RuntimeProfile* profile,
-                                 const TFileRangeDesc& range)
+TrinoConnectorJniReader::TrinoConnectorJniReader(
+        const std::vector<SlotDescriptor*>& file_slot_descs, RuntimeState* state,
+        RuntimeProfile* profile, const TFileRangeDesc& range)
         : _file_slot_descs(file_slot_descs), _state(state), _profile(profile) {
     std::vector<std::string> column_names;
     for (auto& desc : _file_slot_descs) {
@@ -50,19 +51,29 @@ TrinoConnectorJniReader::TrinoConnectorJniReader(const std::vector<SlotDescripto
     params["catalog_name"] = range.table_format_params.trino_connector_params.catalog_name;
     params["db_name"] = range.table_format_params.trino_connector_params.db_name;
     params["table_name"] = range.table_format_params.trino_connector_params.table_name;
-    params["trino_connector_split"] = range.table_format_params.trino_connector_params.trino_connector_split;
-    params["trino_connector_table_handle"] = range.table_format_params.trino_connector_params.trino_connector_table_handle;
-    params["trino_connector_column_handles"] = range.table_format_params.trino_connector_params.trino_connector_column_handles;
-    params["trino_connector_column_metadata"] = range.table_format_params.trino_connector_params.trino_connector_column_metadata;
-    params["trino_connector_column_names"] = range.table_format_params.trino_connector_params.trino_connector_column_names;
-    params["trino_connector_predicate"] = range.table_format_params.trino_connector_params.trino_connector_predicate;
+    params["trino_connector_split"] =
+            range.table_format_params.trino_connector_params.trino_connector_split;
+    params["trino_connector_table_handle"] =
+            range.table_format_params.trino_connector_params.trino_connector_table_handle;
+    params["trino_connector_column_handles"] =
+            range.table_format_params.trino_connector_params.trino_connector_column_handles;
+    params["trino_connector_column_metadata"] =
+            range.table_format_params.trino_connector_params.trino_connector_column_metadata;
+    params["trino_connector_column_names"] =
+            range.table_format_params.trino_connector_params.trino_connector_column_names;
+    params["trino_connector_predicate"] =
+            range.table_format_params.trino_connector_params.trino_connector_predicate;
+    params["trino_connector_session"] =
+            range.table_format_params.trino_connector_params.trino_connector_session;
+    params["trino_connector_trascation_handle"] =
+            range.table_format_params.trino_connector_params.trino_connector_trascation_handle;
 
     // Used to create paimon option
     for (auto& kv : range.table_format_params.trino_connector_params.trino_connector_options) {
         params[TRINO_CONNECTOR_OPTION_PREFIX + kv.first] = kv.second;
     }
-    _jni_connector = std::make_unique<JniConnector>("org/apache/doris/trino/connector/TrinoConnectorJniScanner",
-                                                    params, column_names);
+    _jni_connector = std::make_unique<JniConnector>(
+            "org/apache/doris/trino/connector/TrinoConnectorJniScanner", params, column_names);
 }
 
 Status TrinoConnectorJniReader::get_next_block(Block* block, size_t* read_rows, bool* eof) {
@@ -73,8 +84,9 @@ Status TrinoConnectorJniReader::get_next_block(Block* block, size_t* read_rows, 
     return Status::OK();
 }
 
-Status TrinoConnectorJniReader::get_columns(std::unordered_map<std::string, TypeDescriptor>* name_to_type,
-                                    std::unordered_set<std::string>* missing_cols) {
+Status TrinoConnectorJniReader::get_columns(
+        std::unordered_map<std::string, TypeDescriptor>* name_to_type,
+        std::unordered_set<std::string>* missing_cols) {
     for (auto& desc : _file_slot_descs) {
         name_to_type->emplace(desc->col_name(), desc->type());
     }

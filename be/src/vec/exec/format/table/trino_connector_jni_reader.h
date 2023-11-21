@@ -53,8 +53,9 @@ class TrinoConnectorJniReader : public GenericReader {
 
 public:
     static const std::string TRINO_CONNECTOR_OPTION_PREFIX;
-    TrinoConnectorJniReader(const std::vector<SlotDescriptor*>& file_slot_descs, RuntimeState* state,
-                    RuntimeProfile* profile, const TFileRangeDesc& range);
+    TrinoConnectorJniReader(const std::vector<SlotDescriptor*>& file_slot_descs,
+                            RuntimeState* state, RuntimeProfile* profile,
+                            const TFileRangeDesc& range);
 
     ~TrinoConnectorJniReader() override = default;
 

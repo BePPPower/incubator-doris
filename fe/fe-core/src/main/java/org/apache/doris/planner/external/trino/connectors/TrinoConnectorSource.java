@@ -19,45 +19,45 @@ package org.apache.doris.planner.external.trino.connectors;
 
 import org.apache.doris.analysis.TupleDescriptor;
 import org.apache.doris.catalog.TableIf;
-import org.apache.doris.catalog.external.PaimonExternalTable;
 import org.apache.doris.catalog.external.TrinoConnectorExternalTable;
 import org.apache.doris.common.UserException;
 import org.apache.doris.datasource.ExternalCatalog;
-import org.apache.doris.planner.ColumnRange;
+import org.apache.doris.datasource.trino.connector.TrinoConnectorExternalCatalog;
 import org.apache.doris.thrift.TFileAttributes;
-import org.apache.doris.trino.connector.LocalQueryRunner;
 
+import io.trino.Session;
 import io.trino.metadata.TableHandle;
-import org.apache.paimon.table.Table;
-
-import java.util.Map;
+import io.trino.spi.connector.Connector;
+import io.trino.spi.connector.ConnectorTransactionHandle;
 
 public class TrinoConnectorSource {
     private final TrinoConnectorExternalTable trinoConnectorExtTable;
-    private final TableHandle originTable;
+
+    private final TableHandle trinoConnectorExtTableHandle;
 
     private final TupleDescriptor desc;
 
-    private final LocalQueryRunner localQueryRunner;
+    private final Session trinoSession;
 
-    public TrinoConnectorSource(TrinoConnectorExternalTable table, TupleDescriptor desc,
-                            Map<String, ColumnRange> columnNameToRange, LocalQueryRunner localQueryRunner) {
+    private final Connector connector;
+
+    private ConnectorTransactionHandle connectorTransactionHandle;
+
+    public TrinoConnectorSource(TrinoConnectorExternalTable table, TupleDescriptor desc) {
         this.trinoConnectorExtTable = table;
-        this.originTable = trinoConnectorExtTable.getOriginTable();
+        this.trinoConnectorExtTableHandle = trinoConnectorExtTable.getOriginTable();
         this.desc = desc;
-        this.localQueryRunner = localQueryRunner;
+
+        this.trinoSession = trinoConnectorExtTable.getTrinoSession();
+        this.connector = ((TrinoConnectorExternalCatalog) trinoConnectorExtTable.getCatalog()).getConnector();
     }
 
     public TupleDescriptor getDesc() {
         return desc;
     }
 
-    public LocalQueryRunner getLocalQueryRunner() {
-        return localQueryRunner;
-    }
-
-    public TableHandle getTrinoConnectorTable() {
-        return originTable;
+    public TableHandle getTrinoConnectorExtTableHandle() {
+        return trinoConnectorExtTableHandle;
     }
 
     public TableIf getTargetTable() {
@@ -70,5 +70,21 @@ public class TrinoConnectorSource {
 
     public ExternalCatalog getCatalog() {
         return trinoConnectorExtTable.getCatalog();
+    }
+
+    public Session getTrinoSession() {
+        return trinoSession;
+    }
+
+    public Connector getConnector() {
+        return connector;
+    }
+
+    public void setConnectorTransactionHandle(ConnectorTransactionHandle connectorTransactionHandle) {
+        this.connectorTransactionHandle = connectorTransactionHandle;
+    }
+
+    public ConnectorTransactionHandle getConnectorTransactionHandle() {
+        return connectorTransactionHandle;
     }
 }

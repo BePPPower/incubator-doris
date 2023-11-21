@@ -18,21 +18,26 @@
 package org.apache.doris.catalog.external;
 
 import org.apache.doris.catalog.Column;
-import org.apache.doris.catalog.Env;
 import org.apache.doris.catalog.ScalarType;
 import org.apache.doris.catalog.Type;
-import org.apache.doris.trino.connector.LocalQueryRunner;
 import org.apache.doris.datasource.trino.connector.TrinoConnectorExternalCatalog;
 import org.apache.doris.thrift.THiveTable;
 import org.apache.doris.thrift.TTableDescriptor;
 import org.apache.doris.thrift.TTableType;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import io.trino.Session;
+import io.trino.connector.CatalogName;
 import io.trino.metadata.QualifiedObjectName;
 import io.trino.metadata.TableHandle;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ColumnMetadata;
+import io.trino.spi.connector.Connector;
+import io.trino.spi.connector.ConnectorMetadata;
+import io.trino.spi.connector.ConnectorSession;
+import io.trino.spi.connector.ConnectorTransactionHandle;
+import io.trino.spi.transaction.IsolationLevel;
 import io.trino.spi.type.BigintType;
 import io.trino.spi.type.BooleanType;
 import io.trino.spi.type.CharType;
@@ -49,11 +54,13 @@ import static org.apache.doris.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 
 public class TrinoConnectorExternalTable extends ExternalTable {
@@ -67,15 +74,11 @@ public class TrinoConnectorExternalTable extends ExternalTable {
 
     private Map<String, ColumnMetadata> columnMetadataMap = new HashMap<>();
 
-    private LocalQueryRunner localQueryRunner = null;
-
-    private Session session = null;
+    private Session trinoSession;
 
     public TrinoConnectorExternalTable(long id, String name, String dbName, TrinoConnectorExternalCatalog catalog) {
         super(id, name, catalog, dbName, TableType.TRINO_CONNECTOR_EXTERNAL_TABLE);
-        localQueryRunner = Env.getCurrentEnv().getLocalQueryRunner();
-        // session = ConnectContext.get().getSessionContext();
-        session = localQueryRunner.getDefaultSession();
+        trinoSession = catalog.getTrinoSession();
     }
 
     public String getTrinoConnectorCatalogType() {
@@ -98,35 +101,85 @@ public class TrinoConnectorExternalTable extends ExternalTable {
 
     @Override
     public List<Column> initSchema() {
-        return localQueryRunner.inTransaction(transactionSession -> {
-            TableHandle tableHandle = localQueryRunner.getMetadata().getTableHandle(transactionSession, new QualifiedObjectName(catalog.getName(), dbName, name)).get();
-            columnHandleMap = new HashMap<>(localQueryRunner.getMetadata().getColumnHandles(transactionSession, tableHandle));
-            List<Column> tmpSchema = Lists.newArrayListWithCapacity(columnHandleMap.size());
-            for (Entry<String, ColumnHandle> entry : columnHandleMap.entrySet()) {
-                ColumnHandle columnHandle = entry.getValue();
-                ColumnMetadata columnMetadata = localQueryRunner.getMetadata().getColumnMetadata(transactionSession, tableHandle,
-                        columnHandle);
-                tmpSchema.add(new Column(columnMetadata.getName(),
-                        TrinoConnectorTypeToDorisType(columnMetadata.getType()), true, null,
-                        true, columnMetadata.getComment(), columnMetadata.isHidden(), COLUMN_UNIQUE_ID_INIT_VALUE));
-                columnMetadataMap.put(columnMetadata.getName(), columnMetadata);
+        Connector connector = ((TrinoConnectorExternalCatalog) catalog).getConnector();
+        ConnectorTransactionHandle connectorTransactionHandle = connector.beginTransaction(
+                IsolationLevel.READ_UNCOMMITTED, true, true);
 
-                // io.airlift.json.JsonCodec<ColumnHandle> jsonCodec = new JsonCodecFactory(localQueryRunner.getObjectMapperProvider()).jsonCodec(ColumnHandle.class);
-                // String json = null;
-                // json = jsonCodec.toJson(columnHandle);
-                // ColumnHandle t = null;
-                // t = jsonCodec.fromJson(json);
-                // System.out.println(t);
-            }
-            // io.airlift.json.JsonCodec<TableHandle> codec = new JsonCodecFactory(localQueryRunner.getObjectMapperProvider()).jsonCodec(TableHandle.class);
-            // String json = null;
-            // json = codec.toJson(tableHandle);
-            // TableHandle t = null;
-            // t = codec.fromJson(json);
-            // System.out.println(t);
-            return tmpSchema;
-        });
+        TableHandle tableHandle = getTrinoTableHandle(
+                this.trinoSession, new QualifiedObjectName(catalog.getName(), dbName, name), connector, connectorTransactionHandle).get();
+        columnHandleMap = new HashMap<>(getTrinoColumnHandles(this.trinoSession, tableHandle, connector, connectorTransactionHandle));
+        List<Column> tmpSchema = Lists.newArrayListWithCapacity(columnHandleMap.size());
+        for (Entry<String, ColumnHandle> entry : columnHandleMap.entrySet()) {
+            ColumnHandle columnHandle = entry.getValue();
+            ColumnMetadata columnMetadata = getTrinoColumnMetadata(this.trinoSession, tableHandle, columnHandle,
+                    connector, connectorTransactionHandle);
+            tmpSchema.add(new Column(columnMetadata.getName(),
+                    TrinoConnectorTypeToDorisType(columnMetadata.getType()), true, null,
+                    true, columnMetadata.getComment(), columnMetadata.isHidden(), COLUMN_UNIQUE_ID_INIT_VALUE));
+            columnMetadataMap.put(columnMetadata.getName(), columnMetadata);
+        }
+        return tmpSchema;
+
+        // chenqi
+
+        // return localQueryRunner.inTransaction(transactionSession -> {
+        //     TableHandle tableHandle = localQueryRunner.getMetadata().getTableHandle(transactionSession, new QualifiedObjectName(catalog.getName(), dbName, name)).get();
+        //     columnHandleMap = new HashMap<>(localQueryRunner.getMetadata().getColumnHandles(transactionSession, tableHandle));
+        //     List<Column> tmpSchema = Lists.newArrayListWithCapacity(columnHandleMap.size());
+        //     for (Entry<String, ColumnHandle> entry : columnHandleMap.entrySet()) {
+        //         ColumnHandle columnHandle = entry.getValue();
+        //         ColumnMetadata columnMetadata = localQueryRunner.getMetadata().getColumnMetadata(transactionSession, tableHandle,
+        //                 columnHandle);
+        //         tmpSchema.add(new Column(columnMetadata.getName(),
+        //                 TrinoConnectorTypeToDorisType(columnMetadata.getType()), true, null,
+        //                 true, columnMetadata.getComment(), columnMetadata.isHidden(), COLUMN_UNIQUE_ID_INIT_VALUE));
+        //         columnMetadataMap.put(columnMetadata.getName(), columnMetadata);
+        //     }
+        //     return tmpSchema;
+        // });
     }
+
+    private Optional<TableHandle> getTrinoTableHandle(Session session, QualifiedObjectName table, Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
+        Objects.requireNonNull(table, "table is null");
+
+        if (!table.getCatalogName().isEmpty()
+                && !table.getSchemaName().isEmpty()
+                && !table.getObjectName().isEmpty()) {
+            CatalogName catalogName = ((TrinoConnectorExternalCatalog) catalog).getCatalogName();
+            ConnectorSession connectorSession = session.toConnectorSession(catalogName);
+
+            ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
+            return Optional.ofNullable(connectorMetadata.getTableHandle(connectorSession, table.asSchemaTableName()))
+                    .map((connectorTableHandle) -> new TableHandle(catalogName, connectorTableHandle, connectorTransactionHandle));
+        }
+        return Optional.empty();
+    }
+
+    private Map<String, ColumnHandle> getTrinoColumnHandles(Session session, TableHandle tableHandle, Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
+        CatalogName catalogName = tableHandle.getCatalogName();
+        ConnectorSession connectorSession = session.toConnectorSession(catalogName);
+        ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
+
+        Map<String, ColumnHandle> handles = connectorMetadata.getColumnHandles(connectorSession, tableHandle.getConnectorHandle());
+        ImmutableMap.Builder<String, ColumnHandle> map = ImmutableMap.builder();
+        Iterator var7 = handles.entrySet().iterator();
+
+        while(var7.hasNext()) {
+            Map.Entry<String, ColumnHandle> mapEntry = (Map.Entry)var7.next();
+            map.put(((String)mapEntry.getKey()).toLowerCase(Locale.ENGLISH), (ColumnHandle)mapEntry.getValue());
+        }
+
+        return map.buildOrThrow();
+    }
+
+    private ColumnMetadata getTrinoColumnMetadata(Session session, TableHandle tableHandle, ColumnHandle columnHandle,
+                                        Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
+        CatalogName catalogName = tableHandle.getCatalogName();
+        ConnectorSession connectorSession = session.toConnectorSession(catalogName);
+        ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
+        return connectorMetadata.getColumnMetadata(connectorSession, tableHandle.getConnectorHandle(), columnHandle);
+    }
+
 
     private Type TrinoConnectorPrimitiveTypeToDorisType(io.trino.spi.type.Type type) {
         if (type instanceof BooleanType) {
@@ -193,5 +246,9 @@ public class TrinoConnectorExternalTable extends ExternalTable {
 
     public Map<String, ColumnMetadata> getColumnMetadataMap() {
         return columnMetadataMap;
+    }
+
+    public Session getTrinoSession() {
+        return trinoSession;
     }
 }

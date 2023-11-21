@@ -134,6 +134,10 @@ import org.apache.doris.datasource.ExternalMetaCacheMgr;
 import org.apache.doris.datasource.InternalCatalog;
 import org.apache.doris.datasource.hive.HiveTransactionMgr;
 import org.apache.doris.datasource.hive.event.MetastoreEventsProcessor;
+import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorPluginManager;
+import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorPluginManager.PluginsProvider;
+import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorServerPluginsProvider;
+import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorServerPluginsProviderConfig;
 import org.apache.doris.deploy.DeployManager;
 import org.apache.doris.deploy.impl.AmbariDeployManager;
 import org.apache.doris.deploy.impl.K8sDeployManager;
@@ -266,10 +270,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Queues;
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
+import io.trino.FeaturesConfig;
 import io.trino.Session;
+import io.trino.metadata.HandleResolver;
+import io.trino.metadata.TypeRegistry;
+import io.trino.spi.type.TypeOperators;
 import io.trino.testing.TestingSession;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -494,7 +503,8 @@ public class Env {
     private HiveTransactionMgr hiveTransactionMgr;
 
     private TopicPublisherThread topicPublisherThread;
-    private LocalQueryRunner localQueryRunner;
+
+    private TrinoConnectorPluginManager trinoConnectorPluginManager;
 
     public List<TFrontendInfo> getFrontendInfos() {
         List<TFrontendInfo> res = new ArrayList<>();
@@ -594,10 +604,9 @@ public class Env {
         return binlogManager;
     }
 
-    public LocalQueryRunner getLocalQueryRunner() {
-        return localQueryRunner;
+    public TrinoConnectorPluginManager getTrinoConnectorPluginManager() {
+        return trinoConnectorPluginManager;
     }
-
     private static class SingletonHolder {
         private static final Env INSTANCE = new Env();
     }
@@ -725,9 +734,8 @@ public class Env {
         this.queryCancelWorker = new QueryCancelWorker(systemInfo);
         this.topicPublisherThread = new TopicPublisherThread(
                 "TopicPublisher", Config.publish_topic_info_interval_ms, systemInfo);
-        Session session = TestingSession.testSessionBuilder()
-                .build();
-        this.localQueryRunner = LocalQueryRunner.builder(session).build();
+
+        initSpiEnvironment();
     }
 
     public static void destroyCheckpoint() {
@@ -753,6 +761,18 @@ public class Env {
     // but in some cases, we should get the serving catalog explicitly.
     public static Env getServingEnv() {
         return SingletonHolder.INSTANCE;
+    }
+
+    private void initSpiEnvironment() {
+        TypeOperators typeOperators = new TypeOperators();
+        FeaturesConfig featuresConfig = new FeaturesConfig();
+        TypeRegistry typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
+        PluginsProvider pluginsProvider = new TrinoConnectorServerPluginsProvider(
+                new TrinoConnectorServerPluginsProviderConfig(), directExecutor());
+        HandleResolver handleResolver = new HandleResolver();
+        trinoConnectorPluginManager = new TrinoConnectorPluginManager(pluginsProvider,
+                typeRegistry, handleResolver);
+        trinoConnectorPluginManager.loadPlugins();
     }
 
     public BrokerMgr getBrokerMgr() {

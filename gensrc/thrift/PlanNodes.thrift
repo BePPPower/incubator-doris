@@ -316,13 +316,15 @@ struct TTrinoConnectorFileDesc {
     1: optional string trino_connector_split
     2: optional string trino_connector_table_handle
     3: optional string trino_connector_column_handles
-    4: optional string trino_connector_column_metadata;
+    4: optional string trino_connector_column_metadata
     5: optional string trino_connector_column_names
     6: optional string catalog_name
     7: optional string db_name
     8: optional string table_name
     9: optional string trino_connector_predicate
     10: optional map<string, string> trino_connector_options
+    11: optional string trino_connector_session
+    12: optional string trino_connector_trascation_handle
 }
 
 struct THudiFileDesc {
