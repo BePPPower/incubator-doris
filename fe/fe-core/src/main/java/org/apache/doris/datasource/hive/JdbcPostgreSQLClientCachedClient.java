@@ -25,6 +25,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient.NotificationFilter;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -44,7 +45,7 @@ import org.apache.logging.log4j.Logger;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -118,10 +119,13 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
         }
     }
 
+    // not used
     @Override
     public Partition getPartition(String dbName, String tblName, List<String> partitionValues) throws Exception {
+        LOG.debug("getPartition partitionValues: {}", partitionValues);
         String partitionName = Joiner.on("/").join(partitionValues);
         ImmutableList<String> partitionNames = ImmutableList.of(partitionName);
+        LOG.debug("getPartition partitionNames: {}", partitionNames);
         List<Partition> partitions = getPartitionsByNames(dbName, tblName, partitionNames);
         if (!partitions.isEmpty()) {
             return partitions.get(0);
@@ -133,14 +137,17 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
     @Override
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames)
             throws Exception {
-        List<String> partitionNamesWithQuote = partitionNames.stream().map(partitionName -> "\"" + partitionName + "\"")
+        List<String> partitionNamesWithQuote = partitionNames.stream().map(partitionName -> "'" + partitionName + "'")
                 .collect(Collectors.toList());
         String partitionNamesString = Joiner.on(", ").join(partitionNamesWithQuote);
-        String sql = String.format("SELECT \"CREATE_TIME\", \"LAST_ACCESS_TIME\", \"PART_NAME\", \"SD_ID\""
-                + " FROM \"PARTITIONS\" WHERE \"TBL_ID\" = ("
-                + "SELECT \"TBL_ID\" FROM \"TBLS\" join \"DBS\" on \"TBLS\".\"DB_ID\" = \"DBS\".\"DB_ID\" "
-                + "WHERE \"DBS\".\"NAME\" = '%s' AND \"TBLS\".\"TBL_NAME\"='%s')"
-                + "AND \"PART_NAME\" in (%s);", dbName, tblName, partitionNamesString);
+        String sql = String.format("SELECT \"PART_ID\", \"PARTITIONS\".\"CREATE_TIME\","
+                        + " \"PARTITIONS\".\"LAST_ACCESS_TIME\","
+                        + " \"PART_NAME\", \"PARTITIONS\".\"SD_ID\" FROM \"PARTITIONS\""
+                        + " join \"TBLS\" on \"TBLS\".\"TBL_ID\" = \"PARTITIONS\".\"TBL_ID\""
+                        + " join \"DBS\" on \"TBLS\".\"DB_ID\" = \"DBS\".\"DB_ID\""
+                        + " WHERE \"DBS\".\"NAME\" = '%s' AND \"TBLS\".\"TBL_NAME\"='%s'"
+                        + " AND \"PART_NAME\" in (%s);",
+                dbName, tblName, partitionNamesString);
         LOG.debug("getPartitionsByNames exec sql: {}", sql);
 
         try (Connection conn = getConnection();
@@ -155,15 +162,28 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 partition.setLastAccessTime(rs.getInt("LAST_ACCESS_TIME"));
 
                 // set partition values
-                String partitionName = rs.getString("PART_NAME");
-                List<String> partitionValues = Arrays.stream(partitionName.split("/")).collect(Collectors.toList());
-                partition.setValues(partitionValues);
+                partition.setValues(getPartitionValues(rs.getInt("PART_ID")));
 
                 // set SD
                 StorageDescriptor storageDescriptor = getStorageDescriptor(rs.getInt("SD_ID"));
                 partition.setSd(storageDescriptor);
 
                 builder.add(partition);
+            }
+            return builder.build();
+        }
+    }
+
+    private List<String> getPartitionValues(int partitionId) throws Exception {
+        String sql = String.format("SELECT \"PART_KEY_VAL\" FROM \"PARTITION_KEY_VALS\""
+                + " WHERE \"PART_ID\" = " + partitionId);
+        LOG.debug("getPartitionValues exec sql: {}", sql);
+        try (Connection conn = getConnection();
+                PreparedStatement stmt = conn.prepareStatement(sql);
+                ResultSet rs = stmt.executeQuery()) {
+            Builder<String> builder = ImmutableList.builder();
+            while (rs.next()) {
+                builder.add(rs.getString("PART_KEY_VAL"));
             }
             return builder.build();
         }
@@ -265,7 +285,12 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                         rs.getString("PKEY_TYPE"), rs.getString("PKEY_COMMENT"));
                 builder.add(fieldSchema);
             }
-            return builder.build();
+
+            List<FieldSchema> fieldSchemas = builder.build();
+            // must reverse fields
+            List<FieldSchema> reversedFieldSchemas = Lists.newArrayList(fieldSchemas);
+            Collections.reverse(reversedFieldSchemas);
+            return reversedFieldSchemas;
         }
     }
 
@@ -303,22 +328,26 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
     @Override
     public List<FieldSchema> getSchema(String dbName, String tblName) throws Exception {
         String sql = "SELECT \"COLUMN_NAME\", \"TYPE_NAME\", \"COMMENT\""
-                + " FROM \"DBS\" join \"TBLS\" on \"DBS\".\"DB_ID\" = \"TBLS\".\"DB_ID\""
-                + " join \"COLUMNS_V2\" on \"TBLS\".\"TBL_ID\" = \"COLUMNS_V2\".\"CD_ID\""
+                + " FROM \"TBLS\" join \"DBS\" on \"TBLS\".\"DB_ID\" = \"DBS\".\"DB_ID\""
+                + " join \"SDS\" on \"SDS\".\"SD_ID\" = \"TBLS\".\"SD_ID\""
+                + " join \"COLUMNS_V2\" on \"COLUMNS_V2\".\"CD_ID\" = \"SDS\".\"CD_ID\""
                 + " WHERE \"DBS\".\"NAME\" = '" + dbName + "' AND \"TBLS\".\"TBL_NAME\"='" + tblName + "';";
         LOG.debug("getSchema exec sql: {}", sql);
 
+        Builder<FieldSchema> builder = ImmutableList.builder();
         try (Connection conn = getConnection();
                 PreparedStatement stmt = conn.prepareStatement(sql);
                 ResultSet rs = stmt.executeQuery()) {
-            Builder<FieldSchema> builder = ImmutableList.builder();
             while (rs.next()) {
                 FieldSchema fieldSchema = new FieldSchema(rs.getString("COLUMN_NAME"),
                         rs.getString("TYPE_NAME"), rs.getString("COMMENT"));
                 builder.add(fieldSchema);
             }
-            return builder.build();
         }
+
+        // add partition columns
+        getTablePartitionKeys(dbName, tblName).stream().forEach(field -> builder.add(field));
+        return builder.build();
     }
 
     @Override
