@@ -292,13 +292,13 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 serDeInfo.setDescription(rs.getString("DESCRIPTION"));
                 serDeInfo.setSerializerClass(rs.getString("SERIALIZER_CLASS"));
                 serDeInfo.setDeserializerClass(rs.getString("DESERIALIZER_CLASS"));
-                serDeInfo.setSerdeType(getSerdeType(rs.getString("SERDE_TYPE")));
+                int serdeType = rs.getInt("SERDE_TYPE");
+                LOG.debug("SERDE_TYPE = " + serdeType);
+                serDeInfo.setSerdeType(SerdeType.findByValue(serdeType));
                 return serDeInfo;
             }
             throw new Exception("Can not get SerDeInfo from PG databases, serdeId = " + serdeId + ".");
         }
-
-
     }
 
     private Map<String, String> getSerdeInfoParameters(int serdeId) throws Exception {
@@ -364,17 +364,6 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 return PrincipalType.findByValue(3);
             default:
                 throw new Exception("Unknown owner type of this table");
-        }
-    }
-
-    private SerdeType getSerdeType(String serdeTypeString) throws Exception {
-        switch (serdeTypeString) {
-            case "HIVE":
-                return SerdeType.findByValue(1);
-            case "SCHEMA_REGISTRY":
-                return SerdeType.findByValue(2);
-            default:
-                throw new Exception("Unknown serde type of this table");
         }
     }
 
