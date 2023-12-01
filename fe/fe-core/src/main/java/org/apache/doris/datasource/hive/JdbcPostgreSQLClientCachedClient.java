@@ -167,7 +167,7 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 partition.setValues(getPartitionValues(rs.getInt("PART_ID")));
 
                 // set SD
-                StorageDescriptor storageDescriptor = getStorageDescriptor(rs.getInt("SD_ID"));
+                StorageDescriptor storageDescriptor = getStorageDescriptor(dbName, tblName);
                 partition.setSd(storageDescriptor);
 
                 builder.add(partition);
@@ -245,6 +245,7 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 sd.setOutputFormat(rs.getString("OUTPUT_FORMAT"));
                 sd.setStoredAsSubDirectories(rs.getBoolean("IS_STOREDASSUBDIRECTORIES"));
                 sd.setSerdeInfo(getSerdeInfo(rs.getInt("SERDE_ID")));
+                sd.setCols(getSchema(dbName, tblName));
                 return sd;
             }
             throw new Exception("Can not get StorageDescriptor from PG databases of " + dbName + "." + tblName);

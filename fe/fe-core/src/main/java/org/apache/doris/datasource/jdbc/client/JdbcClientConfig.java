@@ -31,9 +31,9 @@ public class JdbcClientConfig implements Cloneable {
     private String driverClass;
     private String onlySpecifiedDatabase;
     private String isLowerCaseTableNames;
-    private Map<String, Boolean> includeDatabaseMap;
-    private Map<String, Boolean> excludeDatabaseMap;
-    private Map<String, String> customizedProperties;
+    private Map<String, Boolean> includeDatabaseMap = Maps.newHashMap();
+    private Map<String, Boolean> excludeDatabaseMap = Maps.newHashMap();
+    private Map<String, String> customizedProperties = Maps.newHashMap();
 
     @Override
     public JdbcClientConfig clone() {
