@@ -33,6 +33,7 @@ import org.apache.doris.datasource.property.constants.HMSProperties;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -174,6 +175,11 @@ public class HMSExternalCatalog extends ExternalCatalog {
             jdbcClientConfig.setJdbcUrl(catalogProperty.getOrDefault("jdbc_url", ""));
             jdbcClientConfig.setDriverUrl(catalogProperty.getOrDefault("driver_url", ""));
             jdbcClientConfig.setDriverClass(catalogProperty.getOrDefault("driver_class", ""));
+
+            Map<String, String> customizedProperties = Maps.newHashMap();
+            customizedProperties.put("shared_jdbc_url", catalogProperty.getOrDefault("shared_jdbc_url", ""));
+            customizedProperties.put("hive_catalog", catalogProperty.getOrDefault("hive_catalog", ""));
+            jdbcClientConfig.setCustomizedProperties(customizedProperties);
         } else {
             LOG.error("Do not support hive_meta_type = " + hiveMetastoreType);
         }

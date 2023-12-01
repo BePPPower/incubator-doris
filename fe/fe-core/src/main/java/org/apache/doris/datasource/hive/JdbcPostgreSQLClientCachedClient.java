@@ -238,7 +238,8 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
             if (rs.next()) {
                 StorageDescriptor sd = new StorageDescriptor();
                 sd.setInputFormat(rs.getString("INPUT_FORMAT"));
-                sd.setCompressed(rs.getBoolean("IS_COMPRESSED"));
+                // for gauss
+                sd.setCompressed(Boolean.valueOf(rs.getInt("IS_COMPRESSED") != 0));
                 sd.setLocation(rs.getString("LOCATION"));
                 sd.setNumBuckets(rs.getInt("NUM_BUCKETS"));
                 sd.setOutputFormat(rs.getString("OUTPUT_FORMAT"));
@@ -260,7 +261,8 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
             if (rs.next()) {
                 StorageDescriptor sd = new StorageDescriptor();
                 sd.setInputFormat(rs.getString("INPUT_FORMAT"));
-                sd.setCompressed(rs.getBoolean("IS_COMPRESSED"));
+                // for gauss
+                sd.setCompressed(Boolean.valueOf(rs.getInt("IS_COMPRESSED") != 0));
                 sd.setLocation(rs.getString("LOCATION"));
                 sd.setNumBuckets(rs.getInt("NUM_BUCKETS"));
                 sd.setOutputFormat(rs.getString("OUTPUT_FORMAT"));
@@ -285,6 +287,12 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
             if (rs.next()) {
                 serDeInfo.setName(rs.getString("NAME"));
                 serDeInfo.setSerializationLib(rs.getString("SLIB"));
+
+                // for gauss
+                serDeInfo.setDescription(rs.getString("DESCRIPTION"));
+                serDeInfo.setSerializerClass(rs.getString("SERIALIZER_CLASS"));
+                serDeInfo.setDeserializerClass(rs.getString("DESERIALIZER_CLASS"));
+                serDeInfo.setSerdeType(getSerdeType(rs.getString("SERDE_TYPE")));
                 return serDeInfo;
             }
             throw new Exception("Can not get SerDeInfo from PG databases, serdeId = " + serdeId + ".");

@@ -23,6 +23,7 @@ import org.apache.doris.datasource.jdbc.client.JdbcClientConfig;
 import org.apache.doris.datasource.jdbc.client.JdbcClientException;
 
 import com.alibaba.druid.pool.DruidDataSource;
+import com.google.common.base.Preconditions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,9 +39,13 @@ public abstract class JdbcClientCachedClient extends CachedClient {
     protected String jdbcUser;
     protected DruidDataSource dataSource = null;
 
+    protected JdbcClientConfig jdbcClientConfig;
+
     protected JdbcClientCachedClient(PooledHiveMetaStoreClient pooledHiveMetaStoreClient,
             JdbcClientConfig jdbcClientConfig) {
         super(pooledHiveMetaStoreClient);
+        Preconditions.checkNotNull(jdbcClientConfig, "JdbcClientConfig can not be null");
+        this.jdbcClientConfig = jdbcClientConfig;
         this.jdbcUser = jdbcClientConfig.getUser();
         String jdbcUrl = jdbcClientConfig.getJdbcUrl();
         this.dbType = JdbcClient.parseDbType(jdbcUrl);
