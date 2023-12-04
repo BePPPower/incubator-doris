@@ -17,10 +17,8 @@
 
 package org.apache.doris.datasource.hive;
 
-import org.apache.doris.catalog.JdbcTable;
 import org.apache.doris.datasource.jdbc.client.JdbcClientConfig;
 import org.apache.doris.datasource.jdbc.client.JdbcClientException;
-import org.apache.doris.thrift.TOdbcTableType;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
@@ -103,25 +101,6 @@ public class SharedHiveGaussCachedClient extends JdbcPostgreSQLClientCachedClien
             }
             throw new Exception("Can not get slave RDB_KEY from PG databases. dbName = "
                     + dbName + ", tblName = " + tblName);
-        }
-    }
-
-    @Override
-    public List<String> getAllDatabases() throws Exception {
-        String dbName = JdbcTable.databaseProperName(TOdbcTableType.POSTGRESQL, "DB_NAME");
-        String tableName = JdbcTable.databaseProperName(TOdbcTableType.POSTGRESQL, "TABLES_RDB_MAPPING");
-        String sql = String.format("SELECT DISTINCT %s FROM %s WHERE \"CAT_NAME\" = '%s';",
-                dbName, tableName, this.catalogName);
-        LOG.debug("getAllDatabases exec sql: {}", sql);
-        try (Connection conn = getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                ResultSet rs = stmt.executeQuery()) {
-            Builder<String> builder = ImmutableList.builder();
-            while (rs.next()) {
-                String hiveDatabaseName = rs.getString("DB_NAME");
-                builder.add(hiveDatabaseName);
-            }
-            return builder.build();
         }
     }
 

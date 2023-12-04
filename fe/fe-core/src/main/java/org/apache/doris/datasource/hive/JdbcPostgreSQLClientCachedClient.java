@@ -167,7 +167,7 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 partition.setValues(getPartitionValues(rs.getInt("PART_ID")));
 
                 // set SD
-                StorageDescriptor storageDescriptor = getStorageDescriptor(dbName, tblName);
+                StorageDescriptor storageDescriptor = getStorageDescriptor(rs.getInt("SD_ID"));
                 partition.setSd(storageDescriptor);
 
                 builder.add(partition);
@@ -194,7 +194,7 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
     @Override
     public Table getTable(String dbName, String tblName) throws Exception {
         String sql = "SELECT \"TBL_ID\", \"TBL_NAME\", \"DBS\".\"NAME\", \"OWNER\", \"CREATE_TIME\","
-                + " \"LAST_ACCESS_TIME\", \"LAST_ACCESS_TIME\", \"RETENTION\","
+                + " \"LAST_ACCESS_TIME\", \"LAST_ACCESS_TIME\", \"RETENTION\", \"TBLS\".\"SD_ID\", "
                 + " \"IS_REWRITE_ENABLED\", \"VIEW_EXPANDED_TEXT\", \"VIEW_ORIGINAL_TEXT\", \"DBS\".\"OWNER_TYPE\""
                 + " FROM \"TBLS\" join \"DBS\" on \"TBLS\".\"DB_ID\" = \"DBS\".\"DB_ID\" "
                 + " WHERE \"DBS\".\"NAME\" = '" + dbName + "' AND \"TBLS\".\"TBL_NAME\"='" + tblName + "';";
@@ -216,7 +216,7 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 hiveTable.setViewExpandedText(rs.getString("VIEW_EXPANDED_TEXT"));
                 hiveTable.setViewOriginalText(rs.getString("VIEW_ORIGINAL_TEXT"));
 
-                hiveTable.setSd(getStorageDescriptor(dbName, tblName));
+                hiveTable.setSd(getStorageDescriptor(rs.getInt("SD_ID")));
                 hiveTable.setParameters(getTableParameters(rs.getInt("TBL_ID")));
                 hiveTable.setPartitionKeys(getTablePartitionKeys(rs.getInt("TBL_ID")));
                 return hiveTable;
@@ -225,18 +225,18 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
         }
     }
 
-    private StorageDescriptor getStorageDescriptor(String dbName, String tblName) throws Exception {
-        String sql = "SELECT * from \"SDS\" WHERE \"SD_ID\" = ("
-                + "SELECT \"SD_ID\" FROM \"TBLS\" join \"DBS\" on \"TBLS\".\"DB_ID\" = \"DBS\".\"DB_ID\" "
-                + "WHERE \"DBS\".\"NAME\" = '" + dbName + "' AND \"TBLS\".\"TBL_NAME\"='" + tblName + "'"
-                + ");";
+    private StorageDescriptor getStorageDescriptor(int sdId) throws Exception {
+        String sql = "SELECT * from \"SDS\" WHERE \"SD_ID\" = " + sdId;
         LOG.debug("getStorageDescriptorByDbAndTable exec sql: {}", sql);
 
+        StorageDescriptor sd = new StorageDescriptor();
+        sd.setSerdeInfo(getSerdeInfo(sdId));
+        sd.setCols(getSchemaExcludePartitionKeys(sdId));
+
         try (Connection conn = getConnection();
                 PreparedStatement stmt = conn.prepareStatement(sql);
                 ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
-                StorageDescriptor sd = new StorageDescriptor();
                 sd.setInputFormat(rs.getString("INPUT_FORMAT"));
                 // for gauss
                 sd.setCompressed(Boolean.valueOf(rs.getInt("IS_COMPRESSED") != 0));
@@ -244,34 +244,9 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
                 sd.setNumBuckets(rs.getInt("NUM_BUCKETS"));
                 sd.setOutputFormat(rs.getString("OUTPUT_FORMAT"));
                 sd.setStoredAsSubDirectories(rs.getBoolean("IS_STOREDASSUBDIRECTORIES"));
-                sd.setSerdeInfo(getSerdeInfo(rs.getInt("SERDE_ID")));
-                sd.setCols(getSchema(dbName, tblName));
                 return sd;
             }
-            throw new Exception("Can not get StorageDescriptor from PG databases of " + dbName + "." + tblName);
-        }
-    }
-
-    private StorageDescriptor getStorageDescriptor(int sdId) throws Exception {
-        String sql = "SELECT * from \"SDS\" WHERE \"SD_ID\" = " + sdId + ";";
-        LOG.debug("getStorageDescriptorBySDID exec sql: {}", sql);
-
-        try (Connection conn = getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                ResultSet rs = stmt.executeQuery()) {
-            if (rs.next()) {
-                StorageDescriptor sd = new StorageDescriptor();
-                sd.setInputFormat(rs.getString("INPUT_FORMAT"));
-                // for gauss
-                sd.setCompressed(Boolean.valueOf(rs.getInt("IS_COMPRESSED") != 0));
-                sd.setLocation(rs.getString("LOCATION"));
-                sd.setNumBuckets(rs.getInt("NUM_BUCKETS"));
-                sd.setOutputFormat(rs.getString("OUTPUT_FORMAT"));
-                sd.setStoredAsSubDirectories(rs.getBoolean("IS_STOREDASSUBDIRECTORIES"));
-                sd.setSerdeInfo(getSerdeInfo(rs.getInt("SERDE_ID")));
-                return sd;
-            }
-            throw new Exception("Can not get StorageDescriptor from PG databases, SD_ID = " + sdId + ".");
+            throw new Exception("Can not get StorageDescriptor from PG, SD_ID = " + sdId);
         }
     }
 
@@ -396,6 +371,27 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
         // add partition columns
         getTablePartitionKeys(tableId).stream().forEach(field -> builder.add(field));
         return builder.build();
+    }
+
+    private List<FieldSchema> getSchemaExcludePartitionKeys(int sdId) throws Exception {
+        String sql = "SELECT \"COLUMN_NAME\", \"TYPE_NAME\", \"COMMENT\""
+                + " FROM \"SDS\" join \"COLUMNS_V2\" on \"COLUMNS_V2\".\"CD_ID\" = \"SDS\".\"CD_ID\""
+                + " WHERE \"SDS\".\"SD_ID\" = " + sdId;
+        LOG.debug("getSchema exec sql: {}", sql);
+
+        Builder<FieldSchema> colsExcludePartitionKeys = ImmutableList.builder();
+        try (Connection conn = getConnection();
+                PreparedStatement stmt = conn.prepareStatement(sql);
+                ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                FieldSchema fieldSchema = new FieldSchema(rs.getString("COLUMN_NAME"),
+                        rs.getString("TYPE_NAME"), rs.getString("COMMENT"));
+                colsExcludePartitionKeys.add(fieldSchema);
+            }
+        } catch (Exception e) {
+            throw new Exception("Can not get schema of SD_ID = " + sdId);
+        }
+        return colsExcludePartitionKeys.build();
     }
 
     @Override
