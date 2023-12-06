@@ -230,13 +230,13 @@ public class JdbcPostgreSQLClientCachedClient extends JdbcClientCachedClient {
         LOG.debug("getStorageDescriptorByDbAndTable exec sql: {}", sql);
 
         StorageDescriptor sd = new StorageDescriptor();
-        sd.setSerdeInfo(getSerdeInfo(sdId));
         sd.setCols(getSchemaExcludePartitionKeys(sdId));
 
         try (Connection conn = getConnection();
                 PreparedStatement stmt = conn.prepareStatement(sql);
                 ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
+                sd.setSerdeInfo(getSerdeInfo(rs.getInt("SERDE_ID")));
                 sd.setInputFormat(rs.getString("INPUT_FORMAT"));
                 // for gauss
                 sd.setCompressed(Boolean.valueOf(rs.getInt("IS_COMPRESSED") != 0));
