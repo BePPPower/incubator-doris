@@ -238,8 +238,6 @@ public class HivePostgreSQLCachedClient extends HiveJdbcCachedClient {
             if (rs.next()) {
                 sd.setSerdeInfo(getSerdeInfo(rs.getInt("SERDE_ID")));
                 sd.setInputFormat(rs.getString("INPUT_FORMAT"));
-                // for gauss
-                // sd.setCompressed(Boolean.valueOf(rs.getInt("IS_COMPRESSED") != 0));
                 sd.setCompressed(rs.getBoolean("IS_COMPRESSED"));
                 sd.setLocation(rs.getString("LOCATION"));
                 sd.setNumBuckets(rs.getInt("NUM_BUCKETS"));
@@ -264,14 +262,6 @@ public class HivePostgreSQLCachedClient extends HiveJdbcCachedClient {
             if (rs.next()) {
                 serDeInfo.setName(rs.getString("NAME"));
                 serDeInfo.setSerializationLib(rs.getString("SLIB"));
-
-                // for gauss
-                // serDeInfo.setDescription(rs.getString("DESCRIPTION"));
-                // serDeInfo.setSerializerClass(rs.getString("SERIALIZER_CLASS"));
-                // serDeInfo.setDeserializerClass(rs.getString("DESERIALIZER_CLASS"));
-                // int serdeType = rs.getInt("SERDE_TYPE");
-                // LOG.debug("SERDE_TYPE = " + serdeType);
-                // serDeInfo.setSerdeType(SerdeType.findByValue(serdeType));
                 return serDeInfo;
             }
             throw new Exception("Can not get SerDeInfo from PG databases, serdeId = " + serdeId + ".");

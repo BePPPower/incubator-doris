@@ -22,7 +22,6 @@ import org.apache.doris.datasource.jdbc.client.JdbcClient;
 import org.apache.doris.datasource.jdbc.client.JdbcClientConfig;
 
 import com.google.common.base.Preconditions;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 public class CachedClientFactory {
@@ -32,10 +31,6 @@ public class CachedClientFactory {
             return new IMetaStoreClientCachedClient(hiveConf, pooledHiveMetaStoreClient);
         }
         Preconditions.checkNotNull(jdbcClientConfig, "hiveConf and jdbcClientConfig are both null");
-        String sharedJdbcUrl = jdbcClientConfig.getCustomizedProperties().getOrDefault("shared_jdbc_url", "");
-        if (StringUtils.isNotEmpty(sharedJdbcUrl)) {
-            return new SharedHiveGaussCachedClient(pooledHiveMetaStoreClient, jdbcClientConfig);
-        }
         String dbType = JdbcClient.parseDbType(jdbcClientConfig.getJdbcUrl());
         switch (dbType) {
             case JdbcResource.POSTGRESQL:
