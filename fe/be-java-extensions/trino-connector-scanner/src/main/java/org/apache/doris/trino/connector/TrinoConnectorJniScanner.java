@@ -21,7 +21,6 @@ import org.apache.doris.common.jni.JniScanner;
 import org.apache.doris.common.jni.vec.ColumnType;
 import org.apache.doris.common.jni.vec.ScanPredicate;
 import org.apache.doris.common.jni.vec.TableSchema;
-import org.apache.doris.trino.connector.TrinoConnectorPluginManager.PluginsProvider;
 
 import com.fasterxml.jackson.databind.Module;
 import com.google.common.collect.ImmutableMap;
@@ -49,6 +48,8 @@ import io.trino.metadata.Split;
 import io.trino.metadata.TableHandle;
 import io.trino.metadata.TypeRegistry;
 import io.trino.plugin.base.TypeDeserializer;
+import io.trino.server.ServerPluginsProvider;
+import io.trino.server.ServerPluginsProviderConfig;
 import io.trino.spi.Page;
 import io.trino.spi.block.Block;
 import io.trino.spi.classloader.ThreadContextClassLoader;
@@ -255,10 +256,11 @@ public class TrinoConnectorJniScanner extends JniScanner {
         TypeOperators typeOperators = new TypeOperators();
         FeaturesConfig featuresConfig = new FeaturesConfig();
         TypeRegistry typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
-        PluginsProvider pluginsProvider = new TrinoConnectorServerPluginsProvider(
-                new TrinoConnectorServerPluginsProviderConfig(), directExecutor());
+
+        ServerPluginsProvider serverPluginsProvider = new ServerPluginsProvider(new ServerPluginsProviderConfig(),
+                directExecutor());
         HandleResolver handleResolver = new HandleResolver();
-        trinoConnectorPluginManager = new TrinoConnectorPluginManager(pluginsProvider,
+        trinoConnectorPluginManager = new TrinoConnectorPluginManager(serverPluginsProvider,
                 typeRegistry, handleResolver);
         trinoConnectorPluginManager.loadPlugins();
     }

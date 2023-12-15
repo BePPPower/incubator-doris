@@ -135,9 +135,6 @@ import org.apache.doris.datasource.InternalCatalog;
 import org.apache.doris.datasource.hive.HiveTransactionMgr;
 import org.apache.doris.datasource.hive.event.MetastoreEventsProcessor;
 import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorPluginManager;
-import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorPluginManager.PluginsProvider;
-import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorServerPluginsProvider;
-import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorServerPluginsProviderConfig;
 import org.apache.doris.deploy.DeployManager;
 import org.apache.doris.deploy.impl.AmbariDeployManager;
 import org.apache.doris.deploy.impl.K8sDeployManager;
@@ -275,11 +272,11 @@ import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
 import io.trino.FeaturesConfig;
-import io.trino.Session;
 import io.trino.metadata.HandleResolver;
 import io.trino.metadata.TypeRegistry;
+import io.trino.server.ServerPluginsProvider;
+import io.trino.server.ServerPluginsProviderConfig;
 import io.trino.spi.type.TypeOperators;
-import io.trino.testing.TestingSession;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -768,10 +765,10 @@ public class Env {
         FeaturesConfig featuresConfig = new FeaturesConfig();
         TypeRegistry typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
 
-        PluginsProvider pluginsProvider = new TrinoConnectorServerPluginsProvider(
-                new TrinoConnectorServerPluginsProviderConfig(), directExecutor());
+        ServerPluginsProvider serverPluginsProvider = new ServerPluginsProvider(new ServerPluginsProviderConfig(),
+                directExecutor());
         HandleResolver handleResolver = new HandleResolver();
-        trinoConnectorPluginManager = new TrinoConnectorPluginManager(pluginsProvider,
+        trinoConnectorPluginManager = new TrinoConnectorPluginManager(serverPluginsProvider,
                 typeRegistry, handleResolver);
         trinoConnectorPluginManager.loadPlugins();
     }

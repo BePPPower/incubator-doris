@@ -23,6 +23,7 @@ import io.trino.connector.CatalogName;
 import io.trino.metadata.HandleResolver;
 import io.trino.metadata.TypeRegistry;
 import io.trino.server.PluginClassLoader;
+import io.trino.server.PluginManager.PluginsProvider;
 import io.trino.spi.Plugin;
 import io.trino.spi.classloader.ThreadContextClassLoader;
 import io.trino.spi.connector.ConnectorFactory;
@@ -132,7 +133,7 @@ public class TrinoConnectorPluginManager {
             LOG.info("Registering connector %s", new Object[]{connectorFactory.getName()});
             Objects.requireNonNull(connectorFactory, "connectorFactory is null");
             Objects.requireNonNull(duplicatePluginClassLoaderFactory, "duplicatePluginClassLoaderFactory is null");
-            TrinoConnectorInternalConnectorFactory existingConnectorFactory = (TrinoConnectorInternalConnectorFactory)this.connectorFactories.putIfAbsent(
+            TrinoConnectorInternalConnectorFactory existingConnectorFactory = this.connectorFactories.putIfAbsent(
                     connectorFactory.getName(), new TrinoConnectorInternalConnectorFactory(connectorFactory, duplicatePluginClassLoaderFactory));
             Preconditions.checkArgument(existingConnectorFactory == null, "Connector '%s' is already registered", connectorFactory.getName());
         }
@@ -141,18 +142,6 @@ public class TrinoConnectorPluginManager {
     public static PluginClassLoader createClassLoader(String pluginName, List<URL> urls) {
         ClassLoader parent = TrinoConnectorPluginManager.class.getClassLoader();
         return new PluginClassLoader(pluginName, urls, parent, SPI_PACKAGES);
-    }
-
-    public interface PluginsProvider {
-        void loadPlugins(Loader loader, ClassLoaderFactory createClassLoader);
-
-        public interface ClassLoaderFactory {
-            PluginClassLoader create(String pluginName, List<URL> urls);
-        }
-
-        public interface Loader {
-            void load(String description, Supplier<PluginClassLoader> getClassLoader);
-        }
     }
 
     public ConcurrentMap<String, TrinoConnectorInternalConnectorFactory> getConnectorFactories() {
