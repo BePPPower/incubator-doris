@@ -163,7 +163,7 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
                 .collect(Collectors.joining(",")));
         fileDesc.setCatalogName(source.getCatalog().getName());
         fileDesc.setDbName(((TrinoConnectorExternalTable) source.getTargetTable()).getDbName());
-        fileDesc.setTrinoConnectorOptions(((TrinoConnectorExternalCatalog) source.getCatalog()).getTrinoConnectorOptionsMap());
+        fileDesc.setTrinoConnectorOptions(((TrinoConnectorExternalCatalog) source.getCatalog()).getTrinoConnectorProperties());
         fileDesc.setTableName(source.getTargetTable().getName());
         fileDesc.setTrinoConnectorTableHandle(encodeObjectToString(((TrinoConnectorExternalTable) source.getTargetTable()).getOriginTable(), objectMapperProvider));
         List<String> cols = source.getDesc().getSlots().stream().map(slot -> slot.getColumn().getName())
@@ -206,7 +206,7 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
         source.setConnectorTransactionHandle(connectorTransactionHandle);
 
         ConnectorSession connectorSession = source.getTrinoSession().toConnectorSession(
-                ((TrinoConnectorExternalCatalog) trinoConnectorExternalTable.getCatalog()).getCatalogName());
+                ((TrinoConnectorExternalCatalog) trinoConnectorExternalTable.getCatalog()).getTrinoCatalogName());
 
         ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
         connectorMetadata.beginQuery(connectorSession);

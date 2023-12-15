@@ -767,6 +767,7 @@ public class Env {
         TypeOperators typeOperators = new TypeOperators();
         FeaturesConfig featuresConfig = new FeaturesConfig();
         TypeRegistry typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
+
         PluginsProvider pluginsProvider = new TrinoConnectorServerPluginsProvider(
                 new TrinoConnectorServerPluginsProviderConfig(), directExecutor());
         HandleResolver handleResolver = new HandleResolver();

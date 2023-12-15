@@ -145,7 +145,7 @@ public class TrinoConnectorExternalTable extends ExternalTable {
         if (!table.getCatalogName().isEmpty()
                 && !table.getSchemaName().isEmpty()
                 && !table.getObjectName().isEmpty()) {
-            CatalogName catalogName = ((TrinoConnectorExternalCatalog) catalog).getCatalogName();
+            CatalogName catalogName = ((TrinoConnectorExternalCatalog) catalog).getTrinoCatalogName();
             ConnectorSession connectorSession = session.toConnectorSession(catalogName);
 
             ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);

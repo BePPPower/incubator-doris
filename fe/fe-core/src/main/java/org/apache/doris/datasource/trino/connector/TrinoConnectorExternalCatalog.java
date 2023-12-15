@@ -74,36 +74,31 @@ import java.util.stream.Collectors;
 
 public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     private static final Logger LOG = LogManager.getLogger(TrinoConnectorExternalCatalog.class);
-    public static final String TRINO_CONNECTOR_CATALOG_TYPE = "trino.connector.catalog.type";
     public static final String TRINO_CONNECTOR_FILESYSTEM = "filesystem";
     public static final String TRINO_CONNECTOR_HMS = "hms";
-    protected String catalogType;
-    protected CatalogName catalogName;
-    // protected MetadataManager metadataManager;
-    protected Session trinoSession;
 
-    private Connector connector;
-
-    private final QueryIdGenerator queryIdGenerator = new QueryIdGenerator();
-
-    private static final List<String> REQUIRED_PROPERTIES = ImmutableList.of(
-            TrinoConnectorProperties.TRINO_CONNECTOR_NAME
+    private final List<String> TRINO_REQUIRED_PROPERTIES = ImmutableList.of(
+            TrinoConnectorProperties.TRINO_CONNECTOR_NAME,
+            TrinoConnectorProperties.TRINO_CONNECTOR_HIVE_METASTORE_URI,
+            TrinoConnectorProperties.TRINO_CONNECTOR_HIVE_CONFIG_RESOURCES
     );
+
+    private String catalogType = TRINO_CONNECTOR_HMS;
+    private CatalogName trinoCatalogName;
+    private Session trinoSession;
+    private Connector connector;
+    private final QueryIdGenerator queryIdGenerator = new QueryIdGenerator();
 
     public TrinoConnectorExternalCatalog(long catalogId, String name, String resource,
             Map<String, String> props, String comment) {
         super(catalogId, name, Type.TRINO_CONNECTOR, comment);
+        Objects.requireNonNull(name, "catalogName is null");
         catalogProperty = new CatalogProperty(resource, props);
     }
 
-    public CatalogName getCatalog() {
-        makeSureInitialized();
-        return catalogName;
-    }
-
-    private CatalogName createCatalog() {
-        Map<String, String> trinoConnectorOptionsMap = getTrinoConnectorOptionsMap();
-        String connectorName = (String)trinoConnectorOptionsMap.remove("connector.name");
+    private void createCatalog() {
+        Map<String, String> trinoConnectorProperties = getTrinoConnectorProperties();
+        String connectorName = trinoConnectorProperties.remove("connector.name");
         Objects.requireNonNull(connectorName, "connectorName is null");
 
         TrinoConnectorInternalConnectorFactory connectorFactory = Env.getCurrentEnv().getTrinoConnectorPluginManager()
@@ -112,29 +107,25 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                 connectorName,
                 Env.getCurrentEnv().getTrinoConnectorPluginManager().getConnectorFactories().keySet());
 
-        Objects.requireNonNull(name, "catalogName is null");
-        Objects.requireNonNull(trinoConnectorOptionsMap, "properties is null");
+        Objects.requireNonNull(trinoConnectorProperties, "properties is null");
         Objects.requireNonNull(connectorFactory, "connectorFactory is null");
 
-        // TODO(ftw): check if this catalogName is existed?
-        CatalogName catalog = new CatalogName(name);
+        this.trinoCatalogName = new CatalogName(name);
 
         // create connector
-        TrinoConnectorCatalogClassLoaderSupplier  duplicatePluginClassLoaderFactory= new TrinoConnectorCatalogClassLoaderSupplier(catalog,
+        TrinoConnectorCatalogClassLoaderSupplier  duplicatePluginClassLoaderFactory= new TrinoConnectorCatalogClassLoaderSupplier(trinoCatalogName,
                 connectorFactory.getDuplicatePluginClassLoaderFactory(), Env.getCurrentEnv().getTrinoConnectorPluginManager()
                 .getHandleResolver());
-        this.connector = createConnector(catalog, connectorFactory.getConnectorFactory(),
-                duplicatePluginClassLoaderFactory, trinoConnectorOptionsMap);
+        this.connector = createConnector(trinoCatalogName, connectorFactory.getConnectorFactory(),
+                duplicatePluginClassLoaderFactory, trinoConnectorProperties);
 
         // create trino session
         Set<SystemSessionPropertiesProvider> extraSessionProperties = ImmutableSet.of();
         TaskManagerConfig taskManagerConfig = new TaskManagerConfig().setTaskConcurrency(4);
         FeaturesConfig featuresConfig = new FeaturesConfig();
         SessionPropertyManager sessionPropertyManager = createSessionPropertyManager(extraSessionProperties, taskManagerConfig, featuresConfig);
-        sessionPropertyManager.addConnectorSessionProperties(catalog, connector.getSessionProperties());
+        sessionPropertyManager.addConnectorSessionProperties(trinoCatalogName, connector.getSessionProperties());
         this.trinoSession = testSessionBuilder(sessionPropertyManager).setQueryId(queryIdGenerator.createNextQueryId()).build();
-
-        return catalog;
 
         // return localQueryRunner.createCatalog2(name, connectorName, ImmutableMap.copyOf(trinoConnectorOptionsMap));
     }
@@ -154,7 +145,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     }
 
     protected List<String> listDatabaseNames() {
-        ConnectorSession connectorSession = trinoSession.toConnectorSession(catalogName);
+        ConnectorSession connectorSession = trinoSession.toConnectorSession(trinoCatalogName);
         ConnectorTransactionHandle connectorTransactionHandle = this.connector.beginTransaction(
                 IsolationLevel.READ_UNCOMMITTED, true, true);
         ConnectorMetadata connectorMetadata = this.connector.getMetadata(connectorSession, connectorTransactionHandle);
@@ -178,7 +169,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     @Override
     public List<String> listTableNames(SessionContext ctx, String dbName) {
         makeSureInitialized();
-        QualifiedTablePrefix qualifiedTablePrefix = new QualifiedTablePrefix(catalogName.getCatalogName(), dbName);
+        QualifiedTablePrefix qualifiedTablePrefix = new QualifiedTablePrefix(trinoCatalogName.getCatalogName(), dbName);
         List<QualifiedObjectName> tables = trinoListTables(qualifiedTablePrefix);
         return tables.stream().map(field -> field.getObjectName()).collect(Collectors.toList());
 
@@ -190,7 +181,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
         Objects.requireNonNull(prefix, "prefix can not be null");
 
         Set<QualifiedObjectName> tables = new LinkedHashSet();
-        ConnectorSession connectorSession = trinoSession.toConnectorSession(catalogName);
+        ConnectorSession connectorSession = trinoSession.toConnectorSession(trinoCatalogName);
         ConnectorTransactionHandle connectorTransactionHandle = this.connector.beginTransaction(
                 IsolationLevel.READ_UNCOMMITTED, true, true);
         ConnectorMetadata connectorMetadata = this.connector.getMetadata(connectorSession, connectorTransactionHandle);
@@ -208,19 +199,19 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
 
     public Optional<TableHandle> getTrinoConnectorTable(String dbName, String tblName) {
         makeSureInitialized();
-        QualifiedObjectName tableName = new QualifiedObjectName(catalogName.getCatalogName(), dbName, tblName);
+        QualifiedObjectName tableName = new QualifiedObjectName(trinoCatalogName.getCatalogName(), dbName, tblName);
 
         if (!tableName.getCatalogName().isEmpty() &&
                 !tableName.getSchemaName().isEmpty() &&
                 !tableName.getObjectName().isEmpty()) {
-            ConnectorSession connectorSession = trinoSession.toConnectorSession(catalogName);
+            ConnectorSession connectorSession = trinoSession.toConnectorSession(trinoCatalogName);
             ConnectorTransactionHandle connectorTransactionHandle = this.connector.beginTransaction(
                     IsolationLevel.READ_UNCOMMITTED, true, true);
             return Optional.ofNullable(
                     this.connector.getMetadata(connectorSession, connectorTransactionHandle)
                             .getTableHandle(connectorSession, tableName.asSchemaTableName()))
                     .map((connectorTableHandle) -> {
-                return new TableHandle(catalogName, connectorTableHandle, connectorTransactionHandle);
+                return new TableHandle(trinoCatalogName, connectorTableHandle, connectorTransactionHandle);
             });
         }
         return Optional.empty();
@@ -271,27 +262,16 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
         return new SessionPropertyManager(systemSessionProperties);
     }
 
-    public Map<String, String> getTrinoConnectorOptionsMap() {
+    public Map<String, String> getTrinoConnectorProperties() {
         Map<String, String> properties = catalogProperty.getHadoopProperties();
-        Map<String, String> options = Maps.newHashMap();
-        options.put(TrinoConnectorProperties.TRINO_CONNECTOR_NAME, properties.get(TrinoConnectorProperties.TRINO_CONNECTOR_NAME));
-        setTrinoConnectorCatalogOptions(properties, options);
-        setTrinoConnectorExtraOptions(properties, options);
-        options.remove("create_time");
-        options.remove("type");
-        return options;
+        Map<String, String> trinoConnectorProperties = Maps.newHashMap();
+        setTrinoConnectorExtraOptions(properties, trinoConnectorProperties);
+        return trinoConnectorProperties;
     }
 
-    private void setTrinoConnectorCatalogOptions(Map<String, String> properties, Map<String, String> options) {
-        // options.put(TrinoConnectorProperties.TRINO_CONNECTOR_CATALOG_TYPE, getTrinoConnectorCatalogType(catalogType));
-        // options.put(TrinoConnectorProperties.HIVE_METASTORE_URIS, properties.get(HMSProperties.HIVE_METASTORE_URIS));
-    }
-
-    private void setTrinoConnectorExtraOptions(Map<String, String> properties, Map<String, String> options) {
-        for (Map.Entry<String, String> kv : properties.entrySet()) {
-            if (kv.getKey().startsWith(TrinoConnectorProperties.TRINO_CONNECTOR_PREFIX)) {
-                options.put(kv.getKey().substring(TrinoConnectorProperties.TRINO_CONNECTOR_PREFIX.length()), kv.getValue());
-            }
+    private void setTrinoConnectorExtraOptions(Map<String, String> properties, Map<String, String> trinoConnectorProperties) {
+        for (String trinoPropertyKey : TRINO_REQUIRED_PROPERTIES) {
+            trinoConnectorProperties.put(trinoPropertyKey, properties.get(trinoPropertyKey));
         }
     }
 
@@ -299,20 +279,19 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
         return connector;
     }
 
-    public CatalogName getCatalogName() {
-        return catalogName;
+    public CatalogName getTrinoCatalogName() {
+        return trinoCatalogName;
     }
 
     @Override
     protected void initLocalObjectsImpl() {
-        catalogType = TRINO_CONNECTOR_HMS;
-        catalogName = createCatalog();
+        createCatalog();
     }
 
     @Override
     public void checkProperties() throws DdlException {
         super.checkProperties();
-        for (String requiredProperty : REQUIRED_PROPERTIES) {
+        for (String requiredProperty : TRINO_REQUIRED_PROPERTIES) {
             if (!catalogProperty.getProperties().containsKey(requiredProperty)) {
                 throw new DdlException("Required property '" + requiredProperty + "' is missing");
             }

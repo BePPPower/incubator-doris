@@ -25,6 +25,8 @@ import java.util.Map;
 
 public class TrinoConnectorProperties {
     public static final String TRINO_CONNECTOR_NAME = "connector.name";
+    public static final String TRINO_CONNECTOR_HIVE_METASTORE_URI = "hive.metastore.uri";
+    public static final String TRINO_CONNECTOR_HIVE_CONFIG_RESOURCES = "hive.config.resources";
     public static final String TRINO_CONNECTOR_PREFIX = "";
     public static final String TRINO_CONNECTOR_CATALOG_TYPE = "metastore";
     public static final String HIVE_METASTORE_URIS = "uri";
