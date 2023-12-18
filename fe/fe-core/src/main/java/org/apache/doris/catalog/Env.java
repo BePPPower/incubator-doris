@@ -257,7 +257,6 @@ import org.apache.doris.thrift.TStorageMedium;
 import org.apache.doris.transaction.DbUsedDataQuotaInfoCollector;
 import org.apache.doris.transaction.GlobalTransactionMgr;
 import org.apache.doris.transaction.PublishVersionDaemon;
-import org.apache.doris.trino.connector.LocalQueryRunner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -274,6 +273,7 @@ import com.sleepycat.je.rep.NetworkRestoreConfig;
 import io.trino.FeaturesConfig;
 import io.trino.metadata.HandleResolver;
 import io.trino.metadata.TypeRegistry;
+import io.trino.server.PluginManager;
 import io.trino.server.ServerPluginsProvider;
 import io.trino.server.ServerPluginsProviderConfig;
 import io.trino.spi.type.TypeOperators;
@@ -502,6 +502,10 @@ public class Env {
     private TopicPublisherThread topicPublisherThread;
 
     private TrinoConnectorPluginManager trinoConnectorPluginManager;
+
+    private TypeRegistry typeRegistry;
+
+    private FeaturesConfig featuresConfig;
 
     public List<TFrontendInfo> getFrontendInfos() {
         List<TFrontendInfo> res = new ArrayList<>();
@@ -762,8 +766,8 @@ public class Env {
 
     private void initSpiEnvironment() {
         TypeOperators typeOperators = new TypeOperators();
-        FeaturesConfig featuresConfig = new FeaturesConfig();
-        TypeRegistry typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
+        this.featuresConfig = new FeaturesConfig();
+        this.typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
 
         ServerPluginsProvider serverPluginsProvider = new ServerPluginsProvider(new ServerPluginsProviderConfig(),
                 directExecutor());
@@ -771,6 +775,19 @@ public class Env {
         trinoConnectorPluginManager = new TrinoConnectorPluginManager(serverPluginsProvider,
                 typeRegistry, handleResolver);
         trinoConnectorPluginManager.loadPlugins();
+    }
+
+    private PluginManager createPluginManager(ServerPluginsProvider serverPluginsProvider, TypeRegistry typeRegistry,
+                                HandleResolver handleResolver) {
+        return null;
+    }
+
+    public TypeRegistry getTypeRegistry() {
+        return typeRegistry;
+    }
+
+    public FeaturesConfig getFeaturesConfig() {
+        return featuresConfig;
     }
 
     public BrokerMgr getBrokerMgr() {
