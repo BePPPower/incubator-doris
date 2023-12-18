@@ -58,16 +58,17 @@ import io.trino.execution.Lifespan;
 import io.trino.metadata.AbstractTypedJacksonModule;
 import io.trino.metadata.HandleJsonModule;
 import io.trino.metadata.HandleResolver;
-import io.trino.metadata.TableHandle;
 import io.trino.plugin.base.TypeDeserializer;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ColumnMetadata;
 import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorMetadata;
 import io.trino.spi.connector.ConnectorSession;
+import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.connector.ConnectorSplitManager;
 import static io.trino.spi.connector.ConnectorSplitManager.SplitSchedulingStrategy.UNGROUPED_SCHEDULING;
 import io.trino.spi.connector.ConnectorSplitSource;
+import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 import io.trino.spi.connector.Constraint;
 import static io.trino.spi.connector.Constraint.alwaysTrue;
@@ -147,13 +148,13 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
         modules.add(HandleJsonModule.tableHandleModule(handleResolver));
         modules.add(HandleJsonModule.columnHandleModule(handleResolver));
         modules.add(HandleJsonModule.splitModule(handleResolver));
-        modules.add(HandleJsonModule.outputTableHandleModule(handleResolver));
-        modules.add(HandleJsonModule.insertTableHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.outputTableHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.insertTableHandleModule(handleResolver));
         modules.add(HandleJsonModule.tableExecuteHandleModule(handleResolver));
         modules.add(HandleJsonModule.indexHandleModule(handleResolver));
         modules.add(HandleJsonModule.transactionHandleModule(handleResolver));
         modules.add(HandleJsonModule.partitioningHandleModule(handleResolver));
-        modules.add(sessionModule(handleResolver));
+        // modules.add(sessionModule(handleResolver));
         objectMapperProvider.setModules(modules);
         objectMapperProvider.setJsonDeserializers(ImmutableMap.of(io.trino.spi.type.Type.class, new TypeDeserializer(typeManager)));
 
@@ -217,13 +218,13 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
                 EMPTY,
                 alwaysTrue());
 
-        ImmutableSet.Builder<io.trino.metadata.Split> splits = ImmutableSet.builder();
+        ImmutableSet.Builder<ConnectorSplit> connectorSplits = ImmutableSet.builder();
         while (!splitSource.isFinished()) {
             for (io.trino.metadata.Split split : getNextBatch(splitSource)) {
-                splits.add(split);
+                connectorSplits.add(split.getConnectorSplit());
             }
         }
-        return splits.build().stream().map(split->new TrinoConnectorSplit(split)).collect(Collectors.toList());
+        return connectorSplits.build().stream().map(split->new TrinoConnectorSplit(split)).collect(Collectors.toList());
 
         // chenqi
         // Session session = Session.builder(localQueryRunner.getDefaultSession()).setQueryId(queryIdGenerator.createNextQueryId()).build();
@@ -235,8 +236,8 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
         //         alwaysTrue()).stream().map(split->new TrinoConnectorSplit(split)).collect(Collectors.toList());
     }
 
-    private SplitSource getTrinoSplitSource(Connector connector, Session session, ConnectorTransactionHandle connectorTransactionHandle, TableHandle table, ConnectorSplitManager.SplitSchedulingStrategy splitSchedulingStrategy, DynamicFilter dynamicFilter, Constraint constraint) {
-        CatalogName catalogName = table.getCatalogName();
+    private SplitSource getTrinoSplitSource(Connector connector, Session session, ConnectorTransactionHandle connectorTransactionHandle, ConnectorTableHandle table, ConnectorSplitManager.SplitSchedulingStrategy splitSchedulingStrategy, DynamicFilter dynamicFilter, Constraint constraint) {
+        CatalogName catalogName = ((TrinoConnectorExternalCatalog) source.getCatalog()).getTrinoCatalogName();
 
         ConnectorSplitManager splitManager = connector.getSplitManager();
 
@@ -246,12 +247,13 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
 
         ConnectorSession connectorSession = session.toConnectorSession(catalogName);
         // TODO(ftw): here can not use table.getTransactionHandle
-        ConnectorSplitSource source = splitManager.getSplits(connectorTransactionHandle, connectorSession, table.getConnectorHandle(), splitSchedulingStrategy, dynamicFilter, constraint);
+        ConnectorSplitSource source = splitManager.getSplits(connectorTransactionHandle, connectorSession, table, splitSchedulingStrategy, dynamicFilter, constraint);
+
         SplitSource splitSource = new ConnectorAwareSplitSource(catalogName, source);
         if (this.minScheduleSplitBatchSize > 1) {
-            splitSource = new BufferingSplitSource((SplitSource)splitSource, this.minScheduleSplitBatchSize);
+            splitSource = new BufferingSplitSource(splitSource, this.minScheduleSplitBatchSize);
         }
-        return (SplitSource)splitSource;
+        return splitSource;
     }
 
     private static com.fasterxml.jackson.databind.Module sessionModule(HandleResolver resolver) {

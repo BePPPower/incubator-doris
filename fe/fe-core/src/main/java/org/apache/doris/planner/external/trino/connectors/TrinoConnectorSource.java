@@ -26,14 +26,14 @@ import org.apache.doris.datasource.trino.connector.TrinoConnectorExternalCatalog
 import org.apache.doris.thrift.TFileAttributes;
 
 import io.trino.Session;
-import io.trino.metadata.TableHandle;
 import io.trino.spi.connector.Connector;
+import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 
 public class TrinoConnectorSource {
     private final TrinoConnectorExternalTable trinoConnectorExtTable;
 
-    private final TableHandle trinoConnectorExtTableHandle;
+    private final ConnectorTableHandle trinoConnectorExtTableHandle;
 
     private final TupleDescriptor desc;
 
@@ -56,7 +56,7 @@ public class TrinoConnectorSource {
         return desc;
     }
 
-    public TableHandle getTrinoConnectorExtTableHandle() {
+    public ConnectorTableHandle getTrinoConnectorExtTableHandle() {
         return trinoConnectorExtTableHandle;
     }
 

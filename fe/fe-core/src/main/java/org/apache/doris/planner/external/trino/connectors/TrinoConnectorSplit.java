@@ -20,25 +20,25 @@ package org.apache.doris.planner.external.trino.connectors;
 import org.apache.doris.planner.external.FileSplit;
 import org.apache.doris.planner.external.TableFormatType;
 
-import io.trino.metadata.Split;
+import io.trino.spi.connector.ConnectorSplit;
 import org.apache.hadoop.fs.Path;
 
 public class TrinoConnectorSplit extends FileSplit {
-    private Split split;
+    private ConnectorSplit connectorSplit;
     private TableFormatType tableFormatType;
 
-    public TrinoConnectorSplit(Split split) {
+    public TrinoConnectorSplit(ConnectorSplit connectorSplit) {
         super(new Path("dummyPath"), 0, 0, 0, null, null);
-        this.split = split;
+        this.connectorSplit = connectorSplit;
         this.tableFormatType = TableFormatType.TRINO_CONNECTOR;
     }
 
-    public Split getSplit() {
-        return split;
+    public ConnectorSplit getSplit() {
+        return connectorSplit;
     }
 
-    public void setSplit(Split split) {
-        this.split = split;
+    public void setSplit(ConnectorSplit connectorSplit) {
+        this.connectorSplit = connectorSplit;
     }
 
     public TableFormatType getTableFormatType() {

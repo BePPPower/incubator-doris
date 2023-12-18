@@ -36,6 +36,7 @@ import io.trino.spi.connector.ColumnMetadata;
 import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorMetadata;
 import io.trino.spi.connector.ConnectorSession;
+import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 import io.trino.spi.transaction.IsolationLevel;
 import io.trino.spi.type.BigintType;
@@ -68,7 +69,7 @@ public class TrinoConnectorExternalTable extends ExternalTable {
     private static final Logger LOG = LogManager.getLogger(TrinoConnectorExternalTable.class);
 
     public static final int TrinoConnector_DATETIME_SCALE_MS = 3;
-    private Optional<TableHandle> originTable = null;
+    private Optional<ConnectorTableHandle> originTable = null;
 
     private Map<String, ColumnHandle> columnHandleMap = null;
 
@@ -92,7 +93,7 @@ public class TrinoConnectorExternalTable extends ExternalTable {
         }
     }
 
-    public TableHandle getOriginTable() {
+    public ConnectorTableHandle getOriginTable() {
         if (originTable == null) {
             originTable = ((TrinoConnectorExternalCatalog) catalog).getTrinoConnectorTable(dbName, name);
         }
