@@ -32,7 +32,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URL;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.ServiceLoader;
@@ -48,76 +47,60 @@ import javax.inject.Inject;
 public class TrinoConnectorPluginManager {
     private static final Logger LOG = LogManager.getLogger(TrinoConnectorPluginManager.class);
     private static final ImmutableList<String> SPI_PACKAGES = ImmutableList.of("io.trino.spi.",
-                                                                                "com.fasterxml.jackson.annotation.",
-                                                                                "io.airlift.slice.",
-                                                                                "org.openjdk.jol.");
+            "com.fasterxml.jackson.annotation.",
+            "io.airlift.slice.",
+            "org.openjdk.jol.");
 
     private final ConcurrentMap<String, TrinoConnectorInternalConnectorFactory> connectorFactories = new ConcurrentHashMap();
     private final PluginsProvider pluginsProvider;
     private final TypeRegistry typeRegistry;
     private final HandleResolver handleResolver;
     private final AtomicBoolean pluginsLoading = new AtomicBoolean();
-    private final AtomicBoolean pluginsLoaded = new AtomicBoolean();
 
     @Inject
     public TrinoConnectorPluginManager(PluginsProvider pluginsProvider, TypeRegistry typeRegistry, HandleResolver handleResolver) {
-        this.pluginsProvider = (PluginsProvider) Objects.requireNonNull(pluginsProvider, "pluginsProvider is null");
-        this.typeRegistry = (TypeRegistry)Objects.requireNonNull(typeRegistry, "typeRegistry is null");
-        this.handleResolver = (HandleResolver)Objects.requireNonNull(handleResolver, "handleResolver is null");
+        this.pluginsProvider = Objects.requireNonNull(pluginsProvider, "pluginsProvider is null");
+        this.typeRegistry = Objects.requireNonNull(typeRegistry, "typeRegistry is null");
+        this.handleResolver = Objects.requireNonNull(handleResolver, "handleResolver is null");
     }
 
     public void loadPlugins() {
-        if (this.pluginsLoading.compareAndSet(false, true)) {
-            this.pluginsProvider.loadPlugins(this::loadPlugin, TrinoConnectorPluginManager::createClassLoader);
-            this.typeRegistry.verifyTypes();
-            this.pluginsLoaded.set(true);
+        if (!pluginsLoading.compareAndSet(false, true)) {
+            return;
         }
+
+        pluginsProvider.loadPlugins(this::loadPlugin, TrinoConnectorPluginManager::createClassLoader);
+
+        typeRegistry.verifyTypes();
     }
 
     private void loadPlugin(String plugin, Supplier<PluginClassLoader> createClassLoader) {
         LOG.info("-- Loading plugin %s --", new Object[]{plugin});
-        PluginClassLoader pluginClassLoader = (PluginClassLoader)createClassLoader.get();
+
+        PluginClassLoader pluginClassLoader = createClassLoader.get();
+
         LOG.debug("Classpath for plugin:");
-        URL[] var4 = pluginClassLoader.getURLs();
-        int var5 = var4.length;
-
-        for(int var6 = 0; var6 < var5; ++var6) {
-            URL url = var4[var6];
-            LOG.debug("    %s", new Object[]{url.getPath()});
+        for (URL url : pluginClassLoader.getURLs()) {
+            LOG.debug("    %s", url.getPath());
         }
 
-        this.handleResolver.registerClassLoader(pluginClassLoader);
-        ThreadContextClassLoader ignored = new ThreadContextClassLoader(pluginClassLoader);
-
-        try {
-            this.loadPlugin(pluginClassLoader);
-        } catch (Throwable var9) {
-            try {
-                ignored.close();
-            } catch (Throwable var8) {
-                var9.addSuppressed(var8);
-            }
-
-            throw var9;
+        handleResolver.registerClassLoader(pluginClassLoader);
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(pluginClassLoader)) {
+            loadPlugin(pluginClassLoader);
         }
 
-        ignored.close();
-        LOG.info("-- Finished loading plugin %s --", new Object[]{plugin});
+        LOG.info("-- Finished loading plugin %s --", plugin);
     }
 
     private void loadPlugin(PluginClassLoader pluginClassLoader) {
         ServiceLoader<Plugin> serviceLoader = ServiceLoader.load(Plugin.class, pluginClassLoader);
         List<Plugin> plugins = ImmutableList.copyOf(serviceLoader);
         Preconditions.checkState(!plugins.isEmpty(), "No service providers of type %s in the classpath: %s", Plugin.class.getName(), Arrays.asList(pluginClassLoader.getURLs()));
-        Iterator var4 = plugins.iterator();
 
-        while(var4.hasNext()) {
-            Plugin plugin = (Plugin)var4.next();
-            LOG.info("Installing %s", new Object[]{plugin.getClass().getName()});
-            Objects.requireNonNull(pluginClassLoader);
-            this.installPlugin(plugin, pluginClassLoader::duplicate);
+        for (Plugin plugin : plugins) {
+            LOG.info("Installing %s", plugin.getClass().getName());
+            installPlugin(plugin, pluginClassLoader::duplicate);
         }
-
     }
 
     public void installPlugin(Plugin plugin, Function<CatalogName, ClassLoader> duplicatePluginClassLoaderFactory) {
@@ -126,13 +109,8 @@ public class TrinoConnectorPluginManager {
     }
 
     private void installPluginInternal(Plugin plugin, Function<CatalogName, ClassLoader> duplicatePluginClassLoaderFactory) {
-        Iterator var3 = plugin.getConnectorFactories().iterator();
-
-        while(var3.hasNext()) {
-            ConnectorFactory connectorFactory = (ConnectorFactory)var3.next();
-            LOG.info("Registering connector %s", new Object[]{connectorFactory.getName()});
-            Objects.requireNonNull(connectorFactory, "connectorFactory is null");
-            Objects.requireNonNull(duplicatePluginClassLoaderFactory, "duplicatePluginClassLoaderFactory is null");
+        for (ConnectorFactory connectorFactory : plugin.getConnectorFactories()) {
+            LOG.info("Registering connector %s", connectorFactory.getName());
             TrinoConnectorInternalConnectorFactory existingConnectorFactory = this.connectorFactories.putIfAbsent(
                     connectorFactory.getName(), new TrinoConnectorInternalConnectorFactory(connectorFactory, duplicatePluginClassLoaderFactory));
             Preconditions.checkArgument(existingConnectorFactory == null, "Connector '%s' is already registered", connectorFactory.getName());
