@@ -33,6 +33,9 @@ import io.trino.Session;
 import io.trino.SystemSessionProperties;
 import io.trino.SystemSessionPropertiesProvider;
 import io.trino.connector.CatalogName;
+import io.trino.connector.ConnectorAwareNodeManager;
+import io.trino.connector.ConnectorContextInstance;
+import io.trino.connector.InternalMetadataProvider;
 import io.trino.execution.DynamicFilterConfig;
 import io.trino.execution.QueryIdGenerator;
 import io.trino.execution.QueryManagerConfig;
@@ -40,13 +43,17 @@ import io.trino.execution.TaskManagerConfig;
 import io.trino.execution.scheduler.NodeSchedulerConfig;
 import io.trino.memory.MemoryManagerConfig;
 import io.trino.memory.NodeMemoryConfig;
-import io.trino.metadata.AbstractTypedJacksonModule;
 import io.trino.metadata.HandleJsonModule;
 import io.trino.metadata.HandleResolver;
+import io.trino.metadata.InMemoryNodeManager;
+import io.trino.metadata.MetadataManager;
 import io.trino.metadata.SessionPropertyManager;
 import io.trino.metadata.Split;
 import io.trino.metadata.TableHandle;
 import io.trino.metadata.TypeRegistry;
+import io.trino.operator.GroupByHashPageIndexerFactory;
+import io.trino.operator.PagesIndex;
+import io.trino.operator.PagesIndexPageSorter;
 import io.trino.plugin.base.TypeDeserializer;
 import io.trino.server.ServerPluginsProvider;
 import io.trino.server.ServerPluginsProviderConfig;
@@ -64,8 +71,11 @@ import io.trino.spi.connector.DynamicFilter;
 import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeManager;
 import io.trino.spi.type.TypeOperators;
+import io.trino.sql.gen.JoinCompiler;
 import io.trino.testing.TestingSession;
+import io.trino.type.BlockTypeOperators;
 import io.trino.type.InternalTypeManager;
+import io.trino.version.EmbedVersion;
 import static java.util.Objects.requireNonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,9 +84,7 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -123,6 +131,8 @@ public class TrinoConnectorJniScanner extends JniScanner {
     private ConnectorTransactionHandle connectorTransactionHandle;
     private final QueryIdGenerator queryIdGenerator = new QueryIdGenerator();
     private CatalogName catalog;
+    private FeaturesConfig featuresConfig;
+    private TypeRegistry typeRegistry;
 
     public TrinoConnectorJniScanner(int batchSize, Map<String, String> params) {
         LOG.info("params:" + params);
@@ -254,8 +264,8 @@ public class TrinoConnectorJniScanner extends JniScanner {
 
     private void initSpiEnvironment() {
         TypeOperators typeOperators = new TypeOperators();
-        FeaturesConfig featuresConfig = new FeaturesConfig();
-        TypeRegistry typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
+        this.featuresConfig = new FeaturesConfig();
+        this.typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
 
         ServerPluginsProvider serverPluginsProvider = new ServerPluginsProvider(new ServerPluginsProviderConfig(),
                 directExecutor());
@@ -296,33 +306,24 @@ public class TrinoConnectorJniScanner extends JniScanner {
     }
 
     private Connector createConnector(
-            CatalogName catalogName, ConnectorFactory connectorFactory, Supplier<ClassLoader> duplicatePluginClassLoaderFactory, Map<String, String> properties) {
-        ConnectorContext context = new TrinoConenctorTestingConnectorContext(duplicatePluginClassLoaderFactory);
-        ThreadContextClassLoader ignored = new ThreadContextClassLoader(connectorFactory.getClass().getClassLoader());
+            CatalogName catalogName, ConnectorFactory connectorFactory,
+            Supplier<ClassLoader> duplicatePluginClassLoaderFactory, Map<String, String> properties) {
+        InMemoryNodeManager inMemoryNodeManager = new InMemoryNodeManager();
+        inMemoryNodeManager.addCurrentNodeConnector(catalogName);
+        TypeManager typeManager = new InternalTypeManager(this.typeRegistry);
+        TypeOperators typeOperators = this.typeRegistry.getTypeOperators();
+        ConnectorContext context = new ConnectorContextInstance(
+                new ConnectorAwareNodeManager(inMemoryNodeManager, "testenv", catalogName, true),
+                EmbedVersion.testingVersionEmbedder(),
+                typeManager,
+                new InternalMetadataProvider(MetadataManager.createTestMetadataManager(this.featuresConfig), typeManager),
+                new PagesIndexPageSorter(new PagesIndex.TestingFactory(false)),
+                new GroupByHashPageIndexerFactory(new JoinCompiler(typeOperators), new BlockTypeOperators(typeOperators)),
+                duplicatePluginClassLoaderFactory);
 
-        Connector var7;
-        try {
-            var7 = connectorFactory.create(catalogName.getCatalogName(), properties, context);
-        } catch (Throwable var10) {
-            try {
-                ignored.close();
-            } catch (Throwable var9) {
-                var10.addSuppressed(var9);
-            }
-
-            throw var10;
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(connectorFactory.getClass().getClassLoader())) {
+            return connectorFactory.create(catalogName.getCatalogName(), properties, context);
         }
-
-        ignored.close();
-        return var7;
-    }
-
-    private com.fasterxml.jackson.databind.Module sessionModule(HandleResolver resolver) {
-        Objects.requireNonNull(resolver);
-        Function var10003 = resolver::getId;
-        Objects.requireNonNull(resolver);
-        return new AbstractTypedJacksonModule<Session>(Session.class, var10003, resolver::getHandleClass) {
-        };
     }
 
     private void createSession(CatalogName catalog) {

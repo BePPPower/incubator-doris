@@ -20,7 +20,6 @@ package org.apache.doris.datasource.trino.connector;
 import org.apache.doris.catalog.Env;
 import org.apache.doris.common.DdlException;
 import org.apache.doris.datasource.CatalogProperty;
-import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConenctorTestingConnectorContext;
 import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorCatalogClassLoaderSupplier;
 import org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager.TrinoConnectorInternalConnectorFactory;
 import org.apache.doris.datasource.ExternalCatalog;
