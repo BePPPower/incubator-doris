@@ -148,12 +148,12 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
         modules.add(HandleJsonModule.tableHandleModule(handleResolver));
         modules.add(HandleJsonModule.columnHandleModule(handleResolver));
         modules.add(HandleJsonModule.splitModule(handleResolver));
+        modules.add(HandleJsonModule.transactionHandleModule(handleResolver));
         // modules.add(HandleJsonModule.outputTableHandleModule(handleResolver));
         // modules.add(HandleJsonModule.insertTableHandleModule(handleResolver));
-        modules.add(HandleJsonModule.tableExecuteHandleModule(handleResolver));
-        modules.add(HandleJsonModule.indexHandleModule(handleResolver));
-        modules.add(HandleJsonModule.transactionHandleModule(handleResolver));
-        modules.add(HandleJsonModule.partitioningHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.tableExecuteHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.indexHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.partitioningHandleModule(handleResolver));
         // modules.add(sessionModule(handleResolver));
         objectMapperProvider.setModules(modules);
         objectMapperProvider.setJsonDeserializers(ImmutableMap.of(io.trino.spi.type.Type.class, new TypeDeserializer(typeManager)));
@@ -167,8 +167,7 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
         fileDesc.setTrinoConnectorOptions(((TrinoConnectorExternalCatalog) source.getCatalog()).getTrinoConnectorProperties());
         fileDesc.setTableName(source.getTargetTable().getName());
         fileDesc.setTrinoConnectorTableHandle(encodeObjectToString(((TrinoConnectorExternalTable) source.getTargetTable()).getOriginTable(), objectMapperProvider));
-        List<String> cols = source.getDesc().getSlots().stream().map(slot -> slot.getColumn().getName())
-                .collect(Collectors.toList());
+
         Map<String, ColumnMetadata> columnMetadataMap = ((TrinoConnectorExternalTable) source.getTargetTable()).getColumnMetadataMap();
         Map<String, ColumnHandle> columnHandleMap = ((TrinoConnectorExternalTable) source.getTargetTable()).getColumnHandleMap();
         List<ColumnMetadata> columnMetadataList = new ArrayList<>();

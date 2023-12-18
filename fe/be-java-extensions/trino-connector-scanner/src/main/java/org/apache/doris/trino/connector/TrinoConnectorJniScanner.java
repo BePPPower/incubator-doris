@@ -48,8 +48,6 @@ import io.trino.metadata.HandleResolver;
 import io.trino.metadata.InMemoryNodeManager;
 import io.trino.metadata.MetadataManager;
 import io.trino.metadata.SessionPropertyManager;
-import io.trino.metadata.Split;
-import io.trino.metadata.TableHandle;
 import io.trino.metadata.TypeRegistry;
 import io.trino.operator.GroupByHashPageIndexerFactory;
 import io.trino.operator.PagesIndex;
@@ -66,6 +64,8 @@ import io.trino.spi.connector.ConnectorContext;
 import io.trino.spi.connector.ConnectorFactory;
 import io.trino.spi.connector.ConnectorPageSource;
 import io.trino.spi.connector.ConnectorPageSourceProvider;
+import io.trino.spi.connector.ConnectorSplit;
+import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 import io.trino.spi.connector.DynamicFilter;
 import io.trino.spi.type.Type;
@@ -108,13 +108,13 @@ public class TrinoConnectorJniScanner extends JniScanner {
     private final String trinoConnectorPredicate;
     private final String trinoSessionString;
     private final String trinoTrascationHandleString;
-    private TableHandle table;
+    private ConnectorTableHandle connectorTableHandle;
     private final TrinoConnectorColumnValue columnValue = new TrinoConnectorColumnValue();
     private List<String> trinoConnectorAllFieldNames;
 
     private ConnectorPageSourceProvider pageSourceProvider;
     private ConnectorPageSource source;
-    private Split split;
+    private ConnectorSplit connectorSplit;
     private Session session;
     private DynamicFilter dynamicFilter = DynamicFilter.EMPTY;
 
@@ -193,13 +193,13 @@ public class TrinoConnectorJniScanner extends JniScanner {
     @Override
     protected int getNext() throws IOException {
         int rows = 0;
-        split = TrinoConnectorScannerUtils.decodeStringToObject(trinoConnectorSplit, Split.class, this.objectMapperProvider);
-        if (split == null) {
+        connectorSplit = TrinoConnectorScannerUtils.decodeStringToObject(trinoConnectorSplit, ConnectorSplit.class, this.objectMapperProvider);
+        if (connectorSplit == null) {
             return 0;
         }
         if (source == null) {
             source = pageSourceProvider.createPageSource(connectorTransactionHandle, session.toConnectorSession(catalogName),
-                    split.getConnectorSplit(), table.getConnectorHandle(), columns, dynamicFilter);
+                    connectorSplit, connectorTableHandle, columns, dynamicFilter);
         }
         Page page;
         while ((page = source.getNextPage()) != null) {
@@ -247,7 +247,7 @@ public class TrinoConnectorJniScanner extends JniScanner {
 
             connectorTransactionHandle = TrinoConnectorScannerUtils.decodeStringToObject(trinoTrascationHandleString, ConnectorTransactionHandle.class, this.objectMapperProvider);
 
-            table = TrinoConnectorScannerUtils.decodeStringToObject(trinoConnectorTableHandle, TableHandle.class, this.objectMapperProvider);
+            connectorTableHandle = TrinoConnectorScannerUtils.decodeStringToObject(trinoConnectorTableHandle, ConnectorTableHandle.class, this.objectMapperProvider);
             io.airlift.json.JsonCodec<List<ColumnHandle>> columnHandleCodec = new JsonCodecFactory(this.objectMapperProvider)
                     .listJsonCodec(ColumnHandle.class);
             columns = columnHandleCodec.fromJson(trinoConnectorColumnHandles);
