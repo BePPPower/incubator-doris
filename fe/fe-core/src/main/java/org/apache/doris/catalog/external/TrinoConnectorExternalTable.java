@@ -30,7 +30,6 @@ import com.google.common.collect.Lists;
 import io.trino.Session;
 import io.trino.connector.CatalogName;
 import io.trino.metadata.QualifiedObjectName;
-import io.trino.metadata.TableHandle;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ColumnMetadata;
 import io.trino.spi.connector.Connector;
@@ -56,7 +55,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -106,7 +104,7 @@ public class TrinoConnectorExternalTable extends ExternalTable {
         ConnectorTransactionHandle connectorTransactionHandle = connector.beginTransaction(
                 IsolationLevel.READ_UNCOMMITTED, true, true);
 
-        TableHandle tableHandle = getTrinoTableHandle(
+        ConnectorTableHandle tableHandle = getTrinoTableHandle(
                 this.trinoSession, new QualifiedObjectName(catalog.getName(), dbName, name), connector, connectorTransactionHandle).get();
         columnHandleMap = new HashMap<>(getTrinoColumnHandles(this.trinoSession, tableHandle, connector, connectorTransactionHandle));
         List<Column> tmpSchema = Lists.newArrayListWithCapacity(columnHandleMap.size());
@@ -140,7 +138,7 @@ public class TrinoConnectorExternalTable extends ExternalTable {
         // });
     }
 
-    private Optional<TableHandle> getTrinoTableHandle(Session session, QualifiedObjectName table, Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
+    private Optional<ConnectorTableHandle> getTrinoTableHandle(Session session, QualifiedObjectName table, Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
         Objects.requireNonNull(table, "table is null");
 
         if (!table.getCatalogName().isEmpty()
@@ -150,35 +148,32 @@ public class TrinoConnectorExternalTable extends ExternalTable {
             ConnectorSession connectorSession = session.toConnectorSession(catalogName);
 
             ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
-            return Optional.ofNullable(connectorMetadata.getTableHandle(connectorSession, table.asSchemaTableName()))
-                    .map((connectorTableHandle) -> new TableHandle(catalogName, connectorTableHandle, connectorTransactionHandle));
+            return Optional.ofNullable(connectorMetadata.getTableHandle(connectorSession, table.asSchemaTableName()));
         }
         return Optional.empty();
     }
 
-    private Map<String, ColumnHandle> getTrinoColumnHandles(Session session, TableHandle tableHandle, Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
-        CatalogName catalogName = tableHandle.getCatalogName();
+    private Map<String, ColumnHandle> getTrinoColumnHandles(Session session, ConnectorTableHandle connectorTableHandle,
+            Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
+        CatalogName catalogName = ((TrinoConnectorExternalCatalog) catalog).getTrinoCatalogName();
         ConnectorSession connectorSession = session.toConnectorSession(catalogName);
         ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
 
-        Map<String, ColumnHandle> handles = connectorMetadata.getColumnHandles(connectorSession, tableHandle.getConnectorHandle());
+        Map<String, ColumnHandle> handles = connectorMetadata.getColumnHandles(connectorSession, connectorTableHandle);
+
         ImmutableMap.Builder<String, ColumnHandle> map = ImmutableMap.builder();
-        Iterator var7 = handles.entrySet().iterator();
-
-        while(var7.hasNext()) {
-            Map.Entry<String, ColumnHandle> mapEntry = (Map.Entry)var7.next();
-            map.put(((String)mapEntry.getKey()).toLowerCase(Locale.ENGLISH), (ColumnHandle)mapEntry.getValue());
+        for (Entry<String, ColumnHandle> mapEntry : handles.entrySet()) {
+            map.put(mapEntry.getKey().toLowerCase(Locale.ENGLISH), mapEntry.getValue());
         }
-
         return map.buildOrThrow();
     }
 
-    private ColumnMetadata getTrinoColumnMetadata(Session session, TableHandle tableHandle, ColumnHandle columnHandle,
-                                        Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
-        CatalogName catalogName = tableHandle.getCatalogName();
+    private ColumnMetadata getTrinoColumnMetadata(Session session, ConnectorTableHandle connectorTableHandle, ColumnHandle columnHandle,
+            Connector connector, ConnectorTransactionHandle connectorTransactionHandle) {
+        CatalogName catalogName = ((TrinoConnectorExternalCatalog) catalog).getTrinoCatalogName();
         ConnectorSession connectorSession = session.toConnectorSession(catalogName);
         ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
-        return connectorMetadata.getColumnMetadata(connectorSession, tableHandle.getConnectorHandle(), columnHandle);
+        return connectorMetadata.getColumnMetadata(connectorSession, connectorTableHandle, columnHandle);
     }
 
 

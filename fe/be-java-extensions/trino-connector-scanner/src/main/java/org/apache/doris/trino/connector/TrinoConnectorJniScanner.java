@@ -283,12 +283,13 @@ public class TrinoConnectorJniScanner extends JniScanner {
         modules.add(HandleJsonModule.tableHandleModule(handleResolver));
         modules.add(HandleJsonModule.columnHandleModule(handleResolver));
         modules.add(HandleJsonModule.splitModule(handleResolver));
-        modules.add(HandleJsonModule.outputTableHandleModule(handleResolver));
-        modules.add(HandleJsonModule.insertTableHandleModule(handleResolver));
-        modules.add(HandleJsonModule.tableExecuteHandleModule(handleResolver));
-        modules.add(HandleJsonModule.indexHandleModule(handleResolver));
         modules.add(HandleJsonModule.transactionHandleModule(handleResolver));
-        modules.add(HandleJsonModule.partitioningHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.outputTableHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.insertTableHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.tableExecuteHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.indexHandleModule(handleResolver));
+        // modules.add(HandleJsonModule.partitioningHandleModule(handleResolver));
+        // modules.add(sessionModule(handleResolver));
         objectMapperProvider.setModules(modules);
         objectMapperProvider.setJsonDeserializers(ImmutableMap.of(io.trino.spi.type.Type.class, new TypeDeserializer(typeManager)));
         this.objectMapperProvider = objectMapperProvider;
