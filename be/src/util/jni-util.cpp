@@ -21,6 +21,7 @@
 #include <glog/logging.h>
 #include <jni.h>
 #include <jni_md.h>
+#include <pthread.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -31,7 +32,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include <pthread.h>
 
 #include "gutil/strings/substitute.h"
 #include "util/jni_native_method.h"
@@ -83,6 +83,7 @@ const std::string GetDorisJNIDefaultClasspath() {
     }
 
     DCHECK(!out.str().empty()) << "Empty classpath is invalid.";
+    LOG(INFO) << "--ftw: classpath = " << out.str();
     return out.str();
 }
 
@@ -149,7 +150,7 @@ const std::string GetDorisJNIClasspathOption() {
         JNIEnv* env;
         JavaVMInitArgs vm_args;
         vm_args.version = JNI_VERSION_1_8;
-//        vm_args.version = JNI_VERSION_10;
+        //        vm_args.version = JNI_VERSION_10;
         vm_args.options = jvm_options.get();
         vm_args.nOptions = options.size();
         // Set it to JNI_FALSE because JNI_TRUE will let JVM ignore the max size config.
@@ -178,6 +179,7 @@ jmethodID JniUtil::get_jvm_metrics_id_ = nullptr;
 jmethodID JniUtil::get_jvm_threads_id_ = nullptr;
 jmethodID JniUtil::get_jmx_json_ = nullptr;
 jobject JniUtil::jni_scanner_loader_obj_ = nullptr;
+jobject JniUtil::plugin_loader_obj_ = nullptr;
 jmethodID JniUtil::jni_scanner_loader_method_ = nullptr;
 
 Status JniUtfCharGuard::create(JNIEnv* env, jstring jstr, JniUtfCharGuard* out) {
@@ -241,24 +243,23 @@ Status JniUtil::GetJNIEnvSlowPath(JNIEnv** env) {
  *
  * @return          The JNIEnv on success; error code otherwise
  */
-JNIEnv* JniUtil::getGlobalJNIEnv(void)
-{
+JNIEnv* JniUtil::getGlobalJNIEnv(void) {
     JavaVM* vmBuf[VM_BUF_LENGTH];
-    JNIEnv *env;
+    JNIEnv* env;
     jint rv = 0;
     jint noVMs = 0;
-//    jthrowable jthr;
-    char *hadoopClassPath;
-    const char *hadoopClassPathVMArg = "-Djava.class.path=";
+    //    jthrowable jthr;
+    char* hadoopClassPath;
+    const char* hadoopClassPathVMArg = "-Djava.class.path=";
     size_t optHadoopClassPathLen;
-    char *optHadoopClassPath;
+    char* optHadoopClassPath;
     int noArgs = 1;
-    char *hadoopJvmArgs;
+    char* hadoopJvmArgs;
     char jvmArgDelims[] = " ";
     char *str, *token, *savePtr;
     JavaVMInitArgs vm_args;
-    JavaVM *vm;
-    JavaVMOption *options;
+    JavaVM* vm;
+    JavaVMOption* options;
 
     rv = JNI_GetCreatedJavaVMs(&(vmBuf[0]), VM_BUF_LENGTH, &noVMs);
     if (rv != 0) {
@@ -273,17 +274,16 @@ JNIEnv* JniUtil::getGlobalJNIEnv(void)
             fprintf(stderr, "Environment variable CLASSPATH not set!\n");
             return NULL;
         }
-        optHadoopClassPathLen = strlen(hadoopClassPath) +
-                                strlen(hadoopClassPathVMArg) + 1;
-        optHadoopClassPath = (char*)malloc(sizeof(char)*optHadoopClassPathLen);
-        snprintf(optHadoopClassPath, optHadoopClassPathLen,
-                 "%s%s", hadoopClassPathVMArg, hadoopClassPath);
+        optHadoopClassPathLen = strlen(hadoopClassPath) + strlen(hadoopClassPathVMArg) + 1;
+        optHadoopClassPath = (char*)malloc(sizeof(char) * optHadoopClassPathLen);
+        snprintf(optHadoopClassPath, optHadoopClassPathLen, "%s%s", hadoopClassPathVMArg,
+                 hadoopClassPath);
 
         // Determine the # of LIBHDFS_OPTS args
         hadoopJvmArgs = getenv("LIBHDFS_OPTS");
-        if (hadoopJvmArgs != NULL)  {
+        if (hadoopJvmArgs != NULL) {
             hadoopJvmArgs = strdup(hadoopJvmArgs);
-            for (noArgs = 1, str = hadoopJvmArgs; ; noArgs++, str = NULL) {
+            for (noArgs = 1, str = hadoopJvmArgs;; noArgs++, str = NULL) {
                 token = strtok_r(str, jvmArgDelims, &savePtr);
                 if (NULL == token) {
                     break;
@@ -301,9 +301,9 @@ JNIEnv* JniUtil::getGlobalJNIEnv(void)
         }
         options[0].optionString = optHadoopClassPath;
         hadoopJvmArgs = getenv("LIBHDFS_OPTS");
-        if (hadoopJvmArgs != NULL)  {
+        if (hadoopJvmArgs != NULL) {
             hadoopJvmArgs = strdup(hadoopJvmArgs);
-            for (noArgs = 1, str = hadoopJvmArgs; ; noArgs++, str = NULL) {
+            for (noArgs = 1, str = hadoopJvmArgs;; noArgs++, str = NULL) {
                 token = strtok_r(str, jvmArgDelims, &savePtr);
                 if (NULL == token) {
                     break;
@@ -314,38 +314,41 @@ JNIEnv* JniUtil::getGlobalJNIEnv(void)
 
         //Create the VM
         vm_args.version = JNI_VERSION_1_2;
-//        vm_args.version = JNI_VERSION_10;
+        //        vm_args.version = JNI_VERSION_10;
         vm_args.options = options;
         vm_args.nOptions = noArgs;
         vm_args.ignoreUnrecognized = 1;
 
-        rv = JNI_CreateJavaVM(&vm, (void **)&env, &vm_args);
+        rv = JNI_CreateJavaVM(&vm, (void**)&env, &vm_args);
 
-        if (hadoopJvmArgs != NULL)  {
+        if (hadoopJvmArgs != NULL) {
             free(hadoopJvmArgs);
         }
         free(optHadoopClassPath);
         free(options);
 
         if (rv != 0) {
-            fprintf(stderr, "Call to JNI_CreateJavaVM failed "
-                    "with error: %d\n", rv);
+            fprintf(stderr,
+                    "Call to JNI_CreateJavaVM failed "
+                    "with error: %d\n",
+                    rv);
             return NULL;
         }
-//        jthr = invokeMethod(env, NULL, STATIC, NULL,
-//                            "org/apache/hadoop/fs/FileSystem",
-//                            "loadFileSystems", "()V");
-//        if (jthr) {
-//            printExceptionAndFree(env, jthr, PRINT_EXC_ALL, "loadFileSystems");
-//        }
-    }
-    else {
+        //        jthr = invokeMethod(env, NULL, STATIC, NULL,
+        //                            "org/apache/hadoop/fs/FileSystem",
+        //                            "loadFileSystems", "()V");
+        //        if (jthr) {
+        //            printExceptionAndFree(env, jthr, PRINT_EXC_ALL, "loadFileSystems");
+        //        }
+    } else {
         //Attach this thread to the VM
         vm = vmBuf[0];
         rv = vm->functions->AttachCurrentThread(vm, (void**)&env, 0);
         if (rv != 0) {
-            fprintf(stderr, "Call to AttachCurrentThread "
-                    "failed with error: %d\n", rv);
+            fprintf(stderr,
+                    "Call to AttachCurrentThread "
+                    "failed with error: %d\n",
+                    rv);
             return NULL;
         }
     }
@@ -359,7 +362,7 @@ JNIEnv* JniUtil::getGlobalJNIEnv2(void) {
 
     JavaVMOption options[20];
     int numOptions = 0;
-    options[numOptions++].optionString = (char *)"-Djava.class.path=.";
+    options[numOptions++].optionString = (char*)"-Djava.class.path=.";
 
     JavaVMInitArgs args;
     args.version = JNI_VERSION_1_2;
@@ -367,7 +370,7 @@ JNIEnv* JniUtil::getGlobalJNIEnv2(void) {
     args.nOptions = (jint)numOptions;
     args.ignoreUnrecognized = 0;
 
-    if (JNI_CreateJavaVM(&jvm, (void **)&env, &args)) {
+    if (JNI_CreateJavaVM(&jvm, (void**)&env, &args)) {
         fprintf(stderr, "Can't create JVM.\n");
         exit(1);
     }
@@ -410,31 +413,30 @@ JNIEnv* JniUtil::getGlobalJNIEnv2(void) {
  * @param: None.
  * @return The JNIEnv* corresponding to the thread.
  */
-JNIEnv* JniUtil::getJNIEnv2(void)
-{
+JNIEnv* JniUtil::getJNIEnv2(void) {
     pthread_mutex_t jvmMutex = PTHREAD_MUTEX_INITIALIZER;
-    JNIEnv *env;
+    JNIEnv* env;
     pthread_mutex_lock(&jvmMutex);
-//    if (threadLocalStorageGet(&env)) {
-//        pthread_mutex_unlock(&jvmMutex);
-//        return NULL;
-//    }
-//    if (env) {
-//        pthread_mutex_unlock(&jvmMutex);
-//        return env;
-//    }
+    //    if (threadLocalStorageGet(&env)) {
+    //        pthread_mutex_unlock(&jvmMutex);
+    //        return NULL;
+    //    }
+    //    if (env) {
+    //        pthread_mutex_unlock(&jvmMutex);
+    //        return env;
+    //    }
 
-//    env = getGlobalJNIEnv();
+    //    env = getGlobalJNIEnv();
     env = getGlobalJNIEnv2();
     pthread_mutex_unlock(&jvmMutex);
     if (!env) {
         fprintf(stderr, "getJNIEnv: getGlobalJNIEnv failed\n");
         return NULL;
     }
-//    if (threadLocalStorageSet(env)) {
-//        return NULL;
-//    }
-//    THREAD_LOCAL_STORAGE_SET_QUICK(env);
+    //    if (threadLocalStorageSet(env)) {
+    //        return NULL;
+    //    }
+    //    THREAD_LOCAL_STORAGE_SET_QUICK(env);
     return env;
 }
 
@@ -605,6 +607,45 @@ Status JniUtil::init_jni_scanner_loader(JNIEnv* env) {
     return Status::OK();
 }
 
+Status JniUtil::_load_spi_plugins(JNIEnv* env) {
+    // get PluginLoader class
+    jclass plugin_loader_cls;
+    std::string plugin_loader_str = "org/apache/doris/trino/connector/PluginLoader";
+    // RETURN_IF_ERROR(JniUtil::GetGlobalClassRef(env, plugin_loader_str.c_str(), &plugin_loader_cls));
+    RETURN_IF_ERROR(
+            JniUtil::get_jni_scanner_class(env, plugin_loader_str.c_str(), &plugin_loader_cls));
+    if (!plugin_loader_cls) {
+        if (env->ExceptionOccurred()) {
+            env->ExceptionDescribe();
+        }
+        return Status::InternalError("Fail to get JniScanner class.");
+    }
+    RETURN_ERROR_IF_EXC(env);
+
+    // get method: <init>
+    jmethodID plugin_loader_constructor = env->GetMethodID(plugin_loader_cls, "<init>", "()V");
+    RETURN_ERROR_IF_EXC(env);
+    // get method: loadSpiPlugins()
+    jmethodID load_spi_plugins_method =
+            env->GetMethodID(plugin_loader_cls, "loadSpiPlugins", "()V");
+    RETURN_ERROR_IF_EXC(env);
+
+    // call: new PluginLoader()
+    plugin_loader_obj_ = env->NewObject(plugin_loader_cls, plugin_loader_constructor);
+    RETURN_ERROR_IF_EXC(env);
+    if (!plugin_loader_obj_) {
+        if (env->ExceptionOccurred()) {
+            env->ExceptionDescribe();
+        }
+        return Status::InternalError("Failed to create PluginLoader object.");
+    }
+    // call: loadSpiPlugins()
+    env->CallVoidMethod(plugin_loader_obj_, load_spi_plugins_method);
+    RETURN_ERROR_IF_EXC(env);
+
+    return Status::OK();
+}
+
 Status JniUtil::get_jni_scanner_class(JNIEnv* env, const char* classname,
                                       jclass* jni_scanner_class) {
     // Get JNI scanner class by class name;
@@ -732,6 +773,7 @@ Status JniUtil::Init() {
         return Status::InternalError("Failed to find JniUtil.getJMXJson method.");
     }
     RETURN_IF_ERROR(init_jni_scanner_loader(env));
+    RETURN_IF_ERROR(_load_spi_plugins(env));
     jvm_inited_ = true;
     return Status::OK();
 }

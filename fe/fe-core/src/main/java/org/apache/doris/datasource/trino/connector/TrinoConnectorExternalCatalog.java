@@ -105,6 +105,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     private Connector connector;
     private SessionPropertyManager sessionPropertyManager;
     private final QueryIdGenerator queryIdGenerator = new QueryIdGenerator();
+    private TrinoConnectorCatalogClassLoaderSupplier  duplicatePluginClassLoaderFactory;
 
     public TrinoConnectorExternalCatalog(long catalogId, String name, String resource,
             Map<String, String> props, String comment) {
@@ -126,7 +127,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                 Env.getCurrentEnv().getTrinoConnectorPluginManager().getConnectorFactories().keySet());
 
         // create connector
-        TrinoConnectorCatalogClassLoaderSupplier  duplicatePluginClassLoaderFactory= new TrinoConnectorCatalogClassLoaderSupplier(trinoCatalogName,
+        this.duplicatePluginClassLoaderFactory= new TrinoConnectorCatalogClassLoaderSupplier(trinoCatalogName,
                 connectorFactory.getDuplicatePluginClassLoaderFactory(), Env.getCurrentEnv().getTrinoConnectorPluginManager()
                 .getHandleResolver());
         this.connector = createConnector(trinoCatalogName, connectorFactory.getConnectorFactory(),
@@ -307,6 +308,19 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                 throw new DdlException("Required property '" + requiredProperty + "' is missing");
             }
         }
+    }
+
+    @Override
+    public void onClose() {
+        super.onClose();
+        if (connector != null) {
+            try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(connector.getClass().getClassLoader())) {
+                connector.shutdown();
+            } finally {
+                this.duplicatePluginClassLoaderFactory.destroy();
+            }
+        }
+
     }
 
     public Session getTrinoSession() {

@@ -25,7 +25,6 @@ import org.apache.doris.common.jni.vec.TableSchema;
 import com.fasterxml.jackson.databind.Module;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import io.airlift.json.JsonCodecFactory;
 import io.airlift.json.ObjectMapperProvider;
 import io.trino.FeaturesConfig;
@@ -48,13 +47,10 @@ import io.trino.metadata.HandleResolver;
 import io.trino.metadata.InMemoryNodeManager;
 import io.trino.metadata.MetadataManager;
 import io.trino.metadata.SessionPropertyManager;
-import io.trino.metadata.TypeRegistry;
 import io.trino.operator.GroupByHashPageIndexerFactory;
 import io.trino.operator.PagesIndex;
 import io.trino.operator.PagesIndexPageSorter;
 import io.trino.plugin.base.TypeDeserializer;
-import io.trino.server.ServerPluginsProvider;
-import io.trino.server.ServerPluginsProviderConfig;
 import io.trino.spi.Page;
 import io.trino.spi.block.Block;
 import io.trino.spi.classloader.ThreadContextClassLoader;
@@ -84,6 +80,7 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -127,15 +124,19 @@ public class TrinoConnectorJniScanner extends JniScanner {
     private ObjectMapperProvider objectMapperProvider;
 
     private Connector connector;
-
+    private TrinoConnectorCatalogClassLoaderSupplier duplicatePluginClassLoaderFactory;
     private ConnectorTransactionHandle connectorTransactionHandle;
     private final QueryIdGenerator queryIdGenerator = new QueryIdGenerator();
     private CatalogName catalog;
     private FeaturesConfig featuresConfig;
-    private TypeRegistry typeRegistry;
+    private HandleResolver handleResolver;
 
-    public TrinoConnectorJniScanner(int batchSize, Map<String, String> params) {
+    public TrinoConnectorJniScanner(int batchSize, Map<String, String> params, PluginLoader pluginLoader) {
         LOG.info("params:" + params);
+        this.featuresConfig = pluginLoader.getFeaturesConfig();
+        this.trinoConnectorPluginManager = pluginLoader.getTrinoConnectorPluginManager();
+        Objects.requireNonNull(featuresConfig, "featuresConfig can not be null.");
+        Objects.requireNonNull(trinoConnectorPluginManager, "trinoConnectorPluginManager can not be null.");
 
         trinoConnectorSplit = params.get("trino_connector_split");
         trinoConnectorTableHandle = params.get("trino_connector_table_handle");
@@ -188,6 +189,15 @@ public class TrinoConnectorJniScanner extends JniScanner {
 
     @Override
     public void close() throws IOException {
+        LOG.info("close in java side");
+        if (connector != null) {
+            try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(connector.getClass().getClassLoader())) {
+                connector.shutdown();
+            } finally {
+                this.duplicatePluginClassLoaderFactory.destroy();
+            }
+        }
+        LOG.info("close finished in java side");
     }
 
     @Override
@@ -229,7 +239,6 @@ public class TrinoConnectorJniScanner extends JniScanner {
 
     private void initTable() {
         try {
-            initSpiEnvironment();
             initConnector(this.catalog);
 
             // session = localQueryRunner.getDefaultSession();
@@ -262,24 +271,11 @@ public class TrinoConnectorJniScanner extends JniScanner {
         }
     }
 
-    private void initSpiEnvironment() {
-        TypeOperators typeOperators = new TypeOperators();
-        this.featuresConfig = new FeaturesConfig();
-        this.typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
-
-        ServerPluginsProvider serverPluginsProvider = new ServerPluginsProvider(new ServerPluginsProviderConfig(),
-                directExecutor());
-        HandleResolver handleResolver = new HandleResolver();
-        trinoConnectorPluginManager = new TrinoConnectorPluginManager(serverPluginsProvider,
-                typeRegistry, handleResolver);
-        trinoConnectorPluginManager.loadPlugins();
-    }
-
     private void generateObjectMapperProvider() {
         TypeManager typeManager = new InternalTypeManager(this.trinoConnectorPluginManager.getTypeRegistry());
         ObjectMapperProvider objectMapperProvider = new ObjectMapperProvider();
         Set<Module> modules = new HashSet<Module>();
-        HandleResolver handleResolver = this.trinoConnectorPluginManager.getHandleResolver();
+        // HandleResolver handleResolver = this.trinoConnectorPluginManager.getHandleResolver();
         modules.add(HandleJsonModule.tableHandleModule(handleResolver));
         modules.add(HandleJsonModule.columnHandleModule(handleResolver));
         modules.add(HandleJsonModule.splitModule(handleResolver));
@@ -299,8 +295,9 @@ public class TrinoConnectorJniScanner extends JniScanner {
         String connectorName = trinoConnectorOptionParams.remove("connector.name");
         TrinoConnectorInternalConnectorFactory connectorFactory = this.trinoConnectorPluginManager
                 .getConnectorFactories().get(connectorName);
-        TrinoConnectorCatalogClassLoaderSupplier  duplicatePluginClassLoaderFactory= new TrinoConnectorCatalogClassLoaderSupplier(catalog,
-                connectorFactory.getDuplicatePluginClassLoaderFactory(), this.trinoConnectorPluginManager.getHandleResolver());
+        this.handleResolver = new HandleResolver();
+        this.duplicatePluginClassLoaderFactory = new TrinoConnectorCatalogClassLoaderSupplier(catalog,
+                connectorFactory.getDuplicatePluginClassLoaderFactory(), handleResolver);
 
         this.connector = createConnector(catalog, connectorFactory.getConnectorFactory(),
                 duplicatePluginClassLoaderFactory, this.trinoConnectorOptionParams);
@@ -311,8 +308,8 @@ public class TrinoConnectorJniScanner extends JniScanner {
             Supplier<ClassLoader> duplicatePluginClassLoaderFactory, Map<String, String> properties) {
         InMemoryNodeManager inMemoryNodeManager = new InMemoryNodeManager();
         inMemoryNodeManager.addCurrentNodeConnector(catalogName);
-        TypeManager typeManager = new InternalTypeManager(this.typeRegistry);
-        TypeOperators typeOperators = this.typeRegistry.getTypeOperators();
+        TypeManager typeManager = new InternalTypeManager(this.trinoConnectorPluginManager.getTypeRegistry());
+        TypeOperators typeOperators = this.trinoConnectorPluginManager.getTypeRegistry().getTypeOperators();
         ConnectorContext context = new ConnectorContextInstance(
                 new ConnectorAwareNodeManager(inMemoryNodeManager, "testenv", catalogName, true),
                 EmbedVersion.testingVersionEmbedder(),
@@ -331,8 +328,7 @@ public class TrinoConnectorJniScanner extends JniScanner {
         // create trino session
         Set<SystemSessionPropertiesProvider> extraSessionProperties = ImmutableSet.of();
         TaskManagerConfig taskManagerConfig = new TaskManagerConfig().setTaskConcurrency(4);
-        FeaturesConfig featuresConfig = new FeaturesConfig();
-        SessionPropertyManager sessionPropertyManager = createSessionPropertyManager(extraSessionProperties, taskManagerConfig, featuresConfig);
+        SessionPropertyManager sessionPropertyManager = createSessionPropertyManager(extraSessionProperties, taskManagerConfig, this.featuresConfig);
         sessionPropertyManager.addConnectorSessionProperties(catalog, connector.getSessionProperties());
         this.session = testSessionBuilder(sessionPropertyManager).setQueryId(queryIdGenerator.createNextQueryId()).build();
     }

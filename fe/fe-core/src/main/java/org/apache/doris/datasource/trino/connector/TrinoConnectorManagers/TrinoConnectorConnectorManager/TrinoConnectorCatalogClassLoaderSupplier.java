@@ -17,7 +17,7 @@
 
 package org.apache.doris.datasource.trino.connector.TrinoConnectorManagers.TrinoConnectorConnectorManager;
 
-import com.google.common.base.Preconditions;
+import static com.google.common.base.Preconditions.checkState;
 import io.trino.connector.CatalogName;
 import io.trino.metadata.HandleResolver;
 import io.trino.server.PluginClassLoader;
@@ -37,34 +37,32 @@ public class TrinoConnectorCatalogClassLoaderSupplier implements Supplier<ClassL
     private ClassLoader classLoader;
 
     public TrinoConnectorCatalogClassLoaderSupplier(CatalogName catalogName, Function<CatalogName, ClassLoader> duplicatePluginClassLoaderFactory, HandleResolver handleResolver) {
-        this.catalogName = (CatalogName) Objects.requireNonNull(catalogName, "catalogName is null");
-        this.duplicatePluginClassLoaderFactory = (Function)Objects.requireNonNull(duplicatePluginClassLoaderFactory, "duplicatePluginClassLoaderFactory is null");
-        this.handleResolver = (HandleResolver)Objects.requireNonNull(handleResolver, "handleResolver is null");
+        this.catalogName = Objects.requireNonNull(catalogName, "catalogName is null");
+        this.duplicatePluginClassLoaderFactory = Objects.requireNonNull(duplicatePluginClassLoaderFactory, "duplicatePluginClassLoaderFactory is null");
+        this.handleResolver = Objects.requireNonNull(handleResolver, "handleResolver is null");
     }
 
     public ClassLoader get() {
-        ClassLoader classLoader = (ClassLoader)this.duplicatePluginClassLoaderFactory.apply(this.catalogName);
-        synchronized(this) {
-            boolean var10000 = this.classLoader == null;
-            CatalogName var10001 = this.catalogName;
-            Preconditions.checkState(var10000, "class loader is already a duplicated for catalog " + var10001);
-            Preconditions.checkState(!this.destroyed, "catalog has been shutdown");
+        ClassLoader classLoader = this.duplicatePluginClassLoaderFactory.apply(this.catalogName);
+        synchronized (this) {
+            // we check this after class loader creation because it reduces the complexity of the synchronization, and this shouldn't happen
+            checkState(this.classLoader == null, "class loader is already a duplicated for catalog " + catalogName);
+            checkState(!destroyed, "catalog has been shutdown");
             this.classLoader = classLoader;
         }
 
         if (classLoader instanceof PluginClassLoader) {
-            this.handleResolver.registerClassLoader((PluginClassLoader)classLoader);
+            handleResolver.registerClassLoader((PluginClassLoader) classLoader);
         }
-
         return classLoader;
     }
 
     public void destroy() {
         ClassLoader classLoader;
-        synchronized(this) {
-            Preconditions.checkState(!this.destroyed, "catalog has been shutdown");
+        synchronized (this) {
+            checkState(!destroyed, "catalog has been shutdown");
             classLoader = this.classLoader;
-            this.destroyed = true;
+            destroyed = true;
         }
 
         if (classLoader instanceof PluginClassLoader) {
