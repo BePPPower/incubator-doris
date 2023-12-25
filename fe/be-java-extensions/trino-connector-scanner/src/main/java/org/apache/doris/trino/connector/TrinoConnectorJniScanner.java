@@ -21,6 +21,8 @@ import org.apache.doris.common.jni.JniScanner;
 import org.apache.doris.common.jni.vec.ColumnType;
 import org.apache.doris.common.jni.vec.ScanPredicate;
 import org.apache.doris.common.jni.vec.TableSchema;
+import org.apache.doris.trino.connector.TrinoConnectorCache.TrinoConnectorCacheKey;
+import org.apache.doris.trino.connector.TrinoConnectorCache.TrinoConnectorCacheValue;
 
 import com.fasterxml.jackson.databind.Module;
 import com.google.common.collect.ImmutableMap;
@@ -32,9 +34,6 @@ import io.trino.Session;
 import io.trino.SystemSessionProperties;
 import io.trino.SystemSessionPropertiesProvider;
 import io.trino.connector.CatalogName;
-import io.trino.connector.ConnectorAwareNodeManager;
-import io.trino.connector.ConnectorContextInstance;
-import io.trino.connector.InternalMetadataProvider;
 import io.trino.execution.DynamicFilterConfig;
 import io.trino.execution.QueryIdGenerator;
 import io.trino.execution.QueryManagerConfig;
@@ -44,20 +43,12 @@ import io.trino.memory.MemoryManagerConfig;
 import io.trino.memory.NodeMemoryConfig;
 import io.trino.metadata.HandleJsonModule;
 import io.trino.metadata.HandleResolver;
-import io.trino.metadata.InMemoryNodeManager;
-import io.trino.metadata.MetadataManager;
 import io.trino.metadata.SessionPropertyManager;
-import io.trino.operator.GroupByHashPageIndexerFactory;
-import io.trino.operator.PagesIndex;
-import io.trino.operator.PagesIndexPageSorter;
 import io.trino.plugin.base.TypeDeserializer;
 import io.trino.spi.Page;
 import io.trino.spi.block.Block;
-import io.trino.spi.classloader.ThreadContextClassLoader;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.Connector;
-import io.trino.spi.connector.ConnectorContext;
-import io.trino.spi.connector.ConnectorFactory;
 import io.trino.spi.connector.ConnectorPageSource;
 import io.trino.spi.connector.ConnectorPageSourceProvider;
 import io.trino.spi.connector.ConnectorSplit;
@@ -66,12 +57,8 @@ import io.trino.spi.connector.ConnectorTransactionHandle;
 import io.trino.spi.connector.DynamicFilter;
 import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeManager;
-import io.trino.spi.type.TypeOperators;
-import io.trino.sql.gen.JoinCompiler;
 import io.trino.testing.TestingSession;
-import io.trino.type.BlockTypeOperators;
 import io.trino.type.InternalTypeManager;
-import io.trino.version.EmbedVersion;
 import static java.util.Objects.requireNonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,9 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
 
 public class TrinoConnectorJniScanner extends JniScanner {
     private static volatile int physicalProcessorCount = -1;
@@ -179,9 +164,9 @@ public class TrinoConnectorJniScanner extends JniScanner {
                         fields[i], trinoConnectorAllFieldNames));
             }
             Type type = columnMetadataList.get(index).getType();
-            LOG.info("type:" + type);
-            columnTypes[i] = ColumnType.parseType(fields[i], TrinoTypeToHiveTypeTranslator.fromTrinoTypeToHiveType(type));
+            LOG.info("Trino type:" + type);
             LOG.info("hive_type:" + TrinoTypeToHiveTypeTranslator.fromTrinoTypeToHiveType(type));
+            columnTypes[i] = ColumnType.parseType(fields[i], TrinoTypeToHiveTypeTranslator.fromTrinoTypeToHiveType(type));
             LOG.info("columnTypes:" + columnTypes[i].getType());
         }
         super.types = columnTypes;
@@ -190,24 +175,16 @@ public class TrinoConnectorJniScanner extends JniScanner {
     @Override
     public void close() throws IOException {
         LOG.info("close in java side");
-        if (connector != null) {
-            try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(connector.getClass().getClassLoader())) {
-                connector.shutdown();
-            } finally {
-                this.duplicatePluginClassLoaderFactory.destroy();
-            }
-        }
-        LOG.info("close finished in java side");
     }
 
     @Override
     protected int getNext() throws IOException {
         int rows = 0;
-        connectorSplit = TrinoConnectorScannerUtils.decodeStringToObject(trinoConnectorSplit, ConnectorSplit.class, this.objectMapperProvider);
         if (connectorSplit == null) {
             return 0;
         }
         if (source == null) {
+            // TODO(ftw): 这一句也比较费时间，这个能够缓存吗？这个之间调研过是 不能从FE序列化过来
             source = pageSourceProvider.createPageSource(connectorTransactionHandle, session.toConnectorSession(catalogName),
                     connectorSplit, connectorTableHandle, columns, dynamicFilter);
         }
@@ -239,23 +216,20 @@ public class TrinoConnectorJniScanner extends JniScanner {
 
     private void initTable() {
         try {
-            initConnector(this.catalog);
+            initConnector();
 
-            // session = localQueryRunner.getDefaultSession();
-            String connectorName = (String)trinoConnectorOptionParams.remove("connector.name");
             trinoConnectorOptionParams.remove("type");
             trinoConnectorOptionParams.remove("create_time");
 
             pageSourceProvider = connector.getPageSourceProvider();
-            // pageSourceProvider = localQueryRunner.getPageSourceManager();
 
             // mock ObjectMapperProvider
             generateObjectMapperProvider();
 
             createSession(this.catalog);
 
+            // TODO(ftw): 这一段反序列化比较费时间，整个initTable方法的时间基本全在这里反序列化
             connectorTransactionHandle = TrinoConnectorScannerUtils.decodeStringToObject(trinoTrascationHandleString, ConnectorTransactionHandle.class, this.objectMapperProvider);
-
             connectorTableHandle = TrinoConnectorScannerUtils.decodeStringToObject(trinoConnectorTableHandle, ConnectorTableHandle.class, this.objectMapperProvider);
             io.airlift.json.JsonCodec<List<ColumnHandle>> columnHandleCodec = new JsonCodecFactory(this.objectMapperProvider)
                     .listJsonCodec(ColumnHandle.class);
@@ -263,6 +237,7 @@ public class TrinoConnectorJniScanner extends JniScanner {
             io.airlift.json.JsonCodec<List<TrinoColumnMetadata>> columnMetadataCodec = new JsonCodecFactory(this.objectMapperProvider)
                     .listJsonCodec(TrinoColumnMetadata.class);
             columnMetadataList = columnMetadataCodec.fromJson(trinoConnectorColumnMetadata);
+            connectorSplit = TrinoConnectorScannerUtils.decodeStringToObject(trinoConnectorSplit, ConnectorSplit.class, this.objectMapperProvider);
             trinoConnectorAllFieldNames = TrinoConnectorScannerUtils.fieldNames(columnMetadataList);
         } catch (Exception e) {
             e.printStackTrace();
@@ -291,37 +266,19 @@ public class TrinoConnectorJniScanner extends JniScanner {
         this.objectMapperProvider = objectMapperProvider;
     }
 
-    private void initConnector(CatalogName catalog) {
+    private void initConnector() {
         String connectorName = trinoConnectorOptionParams.remove("connector.name");
-        TrinoConnectorInternalConnectorFactory connectorFactory = this.trinoConnectorPluginManager
-                .getConnectorFactories().get(connectorName);
-        this.handleResolver = new HandleResolver();
-        this.duplicatePluginClassLoaderFactory = new TrinoConnectorCatalogClassLoaderSupplier(catalog,
-                connectorFactory.getDuplicatePluginClassLoaderFactory(), handleResolver);
 
-        this.connector = createConnector(catalog, connectorFactory.getConnectorFactory(),
-                duplicatePluginClassLoaderFactory, this.trinoConnectorOptionParams);
-    }
+        TrinoConnectorCacheKey cacheKey = new TrinoConnectorCacheKey(this.catalogName, connectorName);
+        cacheKey.setTrinoCatalogName(this.catalog);
+        cacheKey.setProperties(this.trinoConnectorOptionParams);
+        cacheKey.setTrinoConnectorPluginManager(this.trinoConnectorPluginManager);
+        cacheKey.setFeaturesConfig(this.featuresConfig);
 
-    private Connector createConnector(
-            CatalogName catalogName, ConnectorFactory connectorFactory,
-            Supplier<ClassLoader> duplicatePluginClassLoaderFactory, Map<String, String> properties) {
-        InMemoryNodeManager inMemoryNodeManager = new InMemoryNodeManager();
-        inMemoryNodeManager.addCurrentNodeConnector(catalogName);
-        TypeManager typeManager = new InternalTypeManager(this.trinoConnectorPluginManager.getTypeRegistry());
-        TypeOperators typeOperators = this.trinoConnectorPluginManager.getTypeRegistry().getTypeOperators();
-        ConnectorContext context = new ConnectorContextInstance(
-                new ConnectorAwareNodeManager(inMemoryNodeManager, "testenv", catalogName, true),
-                EmbedVersion.testingVersionEmbedder(),
-                typeManager,
-                new InternalMetadataProvider(MetadataManager.createTestMetadataManager(this.featuresConfig), typeManager),
-                new PagesIndexPageSorter(new PagesIndex.TestingFactory(false)),
-                new GroupByHashPageIndexerFactory(new JoinCompiler(typeOperators), new BlockTypeOperators(typeOperators)),
-                duplicatePluginClassLoaderFactory);
-
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(connectorFactory.getClass().getClassLoader())) {
-            return connectorFactory.create(catalogName.getCatalogName(), properties, context);
-        }
+        TrinoConnectorCacheValue connectorCacheValue = TrinoConnectorCache.getConnector(cacheKey);
+        this.connector = connectorCacheValue.getConnector();
+        this.handleResolver = connectorCacheValue.getHandleResolver();
+        this.duplicatePluginClassLoaderFactory = connectorCacheValue.getDuplicatePluginClassLoaderFactory();
     }
 
     private void createSession(CatalogName catalog) {

@@ -93,7 +93,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     public static final String TRINO_CONNECTOR_FILESYSTEM = "filesystem";
     public static final String TRINO_CONNECTOR_HMS = "hms";
 
-    private final List<String> TRINO_REQUIRED_PROPERTIES = ImmutableList.of(
+    private final List<String> TRINO_HIVE_REQUIRED_PROPERTIES = ImmutableList.of(
             TrinoConnectorProperties.TRINO_CONNECTOR_NAME,
             TrinoConnectorProperties.TRINO_CONNECTOR_HIVE_METASTORE_URI,
             TrinoConnectorProperties.TRINO_CONNECTOR_HIVE_CONFIG_RESOURCES
@@ -161,15 +161,12 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                 IsolationLevel.READ_UNCOMMITTED, true, true);
         ConnectorMetadata connectorMetadata = this.connector.getMetadata(connectorSession, connectorTransactionHandle);
         return connectorMetadata.listSchemaNames(connectorSession);
-        // return localQueryRunner.listSchemaNames(trinoSession, catalogName.getCatalogName());
     }
 
     @Override
     public boolean tableExist(SessionContext ctx, String dbName, String tblName) {
         makeSureInitialized();
         return getTrinoConnectorTable(dbName, tblName).isPresent();
-
-        // return localQueryRunner.tableExists(trinoSession, tblName);
     }
 
     @Override
@@ -215,7 +212,6 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                             .getTableHandle(connectorSession, tableName.asSchemaTableName()));
         }
         return Optional.empty();
-        // return localQueryRunner.getTableHandle(trinoSession, tableName);
     }
 
 
@@ -269,7 +265,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     }
 
     private void setTrinoConnectorExtraOptions(Map<String, String> properties, Map<String, String> trinoConnectorProperties) {
-        for (String trinoPropertyKey : TRINO_REQUIRED_PROPERTIES) {
+        for (String trinoPropertyKey : TRINO_HIVE_REQUIRED_PROPERTIES) {
             trinoConnectorProperties.put(trinoPropertyKey, properties.get(trinoPropertyKey));
         }
     }
@@ -303,7 +299,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     @Override
     public void checkProperties() throws DdlException {
         super.checkProperties();
-        for (String requiredProperty : TRINO_REQUIRED_PROPERTIES) {
+        for (String requiredProperty : TRINO_HIVE_REQUIRED_PROPERTIES) {
             if (!catalogProperty.getProperties().containsKey(requiredProperty)) {
                 throw new DdlException("Required property '" + requiredProperty + "' is missing");
             }

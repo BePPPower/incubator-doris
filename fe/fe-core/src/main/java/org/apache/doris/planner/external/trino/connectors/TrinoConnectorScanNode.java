@@ -55,7 +55,6 @@ import io.trino.Session;
 import io.trino.SystemSessionProperties;
 import io.trino.connector.CatalogName;
 import io.trino.execution.Lifespan;
-import io.trino.metadata.AbstractTypedJacksonModule;
 import io.trino.metadata.HandleJsonModule;
 import io.trino.metadata.HandleResolver;
 import io.trino.plugin.base.TypeDeserializer;
@@ -87,9 +86,7 @@ import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class TrinoConnectorScanNode extends FileQueryScanNode {
@@ -154,7 +151,6 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
         // modules.add(HandleJsonModule.tableExecuteHandleModule(handleResolver));
         // modules.add(HandleJsonModule.indexHandleModule(handleResolver));
         // modules.add(HandleJsonModule.partitioningHandleModule(handleResolver));
-        // modules.add(sessionModule(handleResolver));
         objectMapperProvider.setModules(modules);
         objectMapperProvider.setJsonDeserializers(ImmutableMap.of(io.trino.spi.type.Type.class, new TypeDeserializer(typeManager)));
 
@@ -253,14 +249,6 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
             splitSource = new BufferingSplitSource(splitSource, this.minScheduleSplitBatchSize);
         }
         return splitSource;
-    }
-
-    private static com.fasterxml.jackson.databind.Module sessionModule(HandleResolver resolver) {
-        Objects.requireNonNull(resolver);
-        Function var10003 = resolver::getId;
-        Objects.requireNonNull(resolver);
-        return new AbstractTypedJacksonModule<Session>(Session.class, var10003, resolver::getHandleClass) {
-        };
     }
 
     // When calling 'setTrinoConnectorParams' and 'getSplits', the column trimming has not been performed yet,
