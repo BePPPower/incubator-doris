@@ -134,6 +134,7 @@ import org.apache.doris.datasource.ExternalMetaCacheMgr;
 import org.apache.doris.datasource.InternalCatalog;
 import org.apache.doris.datasource.hive.HiveTransactionMgr;
 import org.apache.doris.datasource.hive.event.MetastoreEventsProcessor;
+import org.apache.doris.datasource.shade.TrinoConnectorPluginManager;
 import org.apache.doris.deploy.DeployManager;
 import org.apache.doris.deploy.impl.AmbariDeployManager;
 import org.apache.doris.deploy.impl.K8sDeployManager;
@@ -278,9 +279,16 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Queues;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
+import io.trino.FeaturesConfig;
+import io.trino.metadata.HandleResolver;
+import io.trino.metadata.TypeRegistry;
+import io.trino.server.ServerPluginsProvider;
+import io.trino.server.ServerPluginsProviderConfig;
+import io.trino.spi.type.TypeOperators;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -518,6 +526,11 @@ public class Env {
 
     private InsertOverwriteManager insertOverwriteManager;
 
+    private FeaturesConfig featuresConfig;
+    private TypeRegistry typeRegistry;
+
+    private TrinoConnectorPluginManager trinoConnectorPluginManager;
+
     public List<TFrontendInfo> getFrontendInfos() {
         List<TFrontendInfo> res = new ArrayList<>();
 
@@ -752,6 +765,8 @@ public class Env {
                 Config.workload_action_interval_ms, systemInfo);
         this.mtmvService = new MTMVService();
         this.insertOverwriteManager = new InsertOverwriteManager();
+
+        initSpiEnvironment();
     }
 
     public static void destroyCheckpoint() {
@@ -771,6 +786,21 @@ public class Env {
         } else {
             return SingletonHolder.INSTANCE;
         }
+    }
+
+    private void initSpiEnvironment() {
+        TypeOperators typeOperators = new TypeOperators();
+        this.featuresConfig = new FeaturesConfig();
+        this.typeRegistry = new TypeRegistry(typeOperators, featuresConfig);
+
+        ServerPluginsProviderConfig serverPluginsProviderConfig = new ServerPluginsProviderConfig()
+                .setInstalledPluginsDir(new File(TrinoConnectorPluginManager.trinoConnectorPluginsDir));
+        ServerPluginsProvider serverPluginsProvider = new ServerPluginsProvider(serverPluginsProviderConfig,
+                MoreExecutors.directExecutor());
+        HandleResolver handleResolver = new HandleResolver();
+        this.trinoConnectorPluginManager = new TrinoConnectorPluginManager(serverPluginsProvider,
+                typeRegistry, handleResolver);
+        trinoConnectorPluginManager.loadPlugins();
     }
 
     // NOTICE: in most case, we should use getCurrentEnv() to get the right catalog.
@@ -797,6 +827,18 @@ public class Env {
 
     public PluginMgr getPluginMgr() {
         return pluginMgr;
+    }
+
+    public FeaturesConfig getFeaturesConfig() {
+        return featuresConfig;
+    }
+
+    public TypeRegistry getTypeRegistry() {
+        return typeRegistry;
+    }
+
+    public TrinoConnectorPluginManager getPluginManager() {
+        return trinoConnectorPluginManager;
     }
 
     public Auth getAuth() {
