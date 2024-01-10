@@ -100,9 +100,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     public static final String TRINO_CONNECTOR_FILESYSTEM = "filesystem";
 
     private static final List<String> TRINO_HIVE_REQUIRED_PROPERTIES = ImmutableList.of(
-            TrinoConnectorProperties.TRINO_CONNECTOR_NAME,
-            TrinoConnectorProperties.TRINO_CONNECTOR_HIVE_METASTORE_URI,
-            TrinoConnectorProperties.TRINO_CONNECTOR_HIVE_CONFIG_RESOURCES
+            TrinoConnectorProperties.TRINO_CONNECTOR_NAME
     );
 
     private String catalogType = TRINO_CONNECTOR_HMS;
@@ -257,10 +255,10 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     }
 
     public Map<String, String> getTrinoConnectorProperties() {
-        Map<String, String> properties = catalogProperty.getHadoopProperties();
-        Map<String, String> trinoConnectorProperties = Maps.newHashMap();
-        setTrinoConnectorExtraOptions(properties, trinoConnectorProperties);
-        return trinoConnectorProperties;
+        Map<String, String> properties = catalogProperty.getProperties();
+        properties.remove("create_time");
+        properties.remove("type");
+        return properties;
     }
 
     private void setTrinoConnectorExtraOptions(Map<String, String> properties,
