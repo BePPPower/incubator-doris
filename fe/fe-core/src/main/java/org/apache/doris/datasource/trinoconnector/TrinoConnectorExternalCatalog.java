@@ -24,12 +24,14 @@ import org.apache.doris.datasource.ExternalCatalog;
 import org.apache.doris.datasource.InitCatalogLog.Type;
 import org.apache.doris.datasource.SessionContext;
 import org.apache.doris.datasource.property.constants.TrinoConnectorProperties;
+import org.apache.doris.datasource.shade.TrinoConnectorStaticCatalogManager;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.airlift.node.NodeInfo;
 import io.airlift.tracing.Tracing;
 import io.opentelemetry.api.OpenTelemetry;
 import io.trino.Session;
@@ -42,9 +44,11 @@ import io.trino.connector.ConnectorAwareNodeManager;
 import io.trino.connector.ConnectorContextInstance;
 import io.trino.connector.ConnectorName;
 import io.trino.connector.CoordinatorDynamicCatalogManager;
-import io.trino.connector.InMemoryCatalogStore;
+import io.trino.connector.DefaultCatalogFactory;
 import io.trino.connector.InternalMetadataProvider;
 import io.trino.connector.LazyCatalogFactory;
+import io.trino.eventlistener.EventListenerConfig;
+import io.trino.eventlistener.EventListenerManager;
 import io.trino.execution.DynamicFilterConfig;
 import io.trino.execution.QueryIdGenerator;
 import io.trino.execution.QueryManagerConfig;
@@ -60,6 +64,7 @@ import io.trino.metadata.SessionPropertyManager;
 import io.trino.operator.GroupByHashPageIndexerFactory;
 import io.trino.operator.PagesIndex;
 import io.trino.operator.PagesIndexPageSorter;
+import io.trino.plugin.base.security.AllowAllSystemAccessControl;
 import io.trino.spi.classloader.ThreadContextClassLoader;
 import io.trino.spi.connector.CatalogHandle;
 import io.trino.spi.connector.CatalogHandle.CatalogVersion;
@@ -77,7 +82,9 @@ import io.trino.spi.type.TypeManager;
 import io.trino.spi.type.TypeOperators;
 import io.trino.sql.gen.JoinCompiler;
 import io.trino.sql.planner.OptimizerConfig;
+import io.trino.testing.TestingAccessControlManager;
 import io.trino.testing.TestingSession;
+import io.trino.transaction.NoOpTransactionManager;
 import io.trino.type.InternalTypeManager;
 import io.trino.util.EmbedVersion;
 import org.apache.logging.log4j.LogManager;
@@ -104,11 +111,13 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     );
 
     private String catalogType = TRINO_CONNECTOR_HMS;
-    private CatalogName trinoCatalogName;
-    private CatalogHandle trinoCatalogHandle;
+    private final CatalogName trinoCatalogName;
+    private final CatalogHandle trinoCatalogHandle;
     private Session trinoSession;
     private Connector connector;
     private final QueryIdGenerator queryIdGenerator = new QueryIdGenerator();
+    private CoordinatorDynamicCatalogManager coordinatorDynamicCatalogManager;
+    private TrinoConnectorStaticCatalogManager staticCatalogManager;
 
     public TrinoConnectorExternalCatalog(long catalogId, String name, String resource,
             Map<String, String> props, String comment) {
@@ -119,12 +128,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
         trinoCatalogHandle = CatalogHandle.createRootCatalogHandle(name, new CatalogVersion("test"));
     }
 
-    private void initConnector() {
-        Map<String, String> trinoConnectorProperties = getTrinoConnectorProperties();
-        String connectorNameString = trinoConnectorProperties.remove("connector.name");
-        Objects.requireNonNull(connectorNameString, "connectorName is null");
-        ConnectorName connectorName = new ConnectorName(connectorNameString);
-
+    private void initConnector(ConnectorName connectorName, Map<String, String> trinoConnectorProperties) {
         ConnectorFactory connectorFactory = Env.getCurrentEnv().getPluginManager().getConnectorFactories()
                 .get(connectorName);
         Preconditions.checkArgument(connectorFactory != null, "No factory for connector '%s'.  Available factories: %s",
@@ -152,11 +156,8 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                         new NodeSchedulerConfig()))
                 .build();
 
-        LazyCatalogFactory catalogFactory = new LazyCatalogFactory();
-        CoordinatorDynamicCatalogManager coordinatorDynamicCatalogManager = new CoordinatorDynamicCatalogManager(
-                new InMemoryCatalogStore(), catalogFactory, MoreExecutors.directExecutor());
         return CatalogServiceProviderModule.createSessionPropertyManager(systemSessionProperties,
-                coordinatorDynamicCatalogManager);
+                staticCatalogManager);
     }
 
     @Override
@@ -282,7 +283,48 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
 
     @Override
     protected void initLocalObjectsImpl() {
-        initConnector();
+        Map<String, String> trinoConnectorProperties = getTrinoConnectorProperties();
+        String connectorNameString = trinoConnectorProperties.remove("connector.name");
+        Objects.requireNonNull(connectorNameString, "connectorName is null");
+        ConnectorName connectorName = new ConnectorName(connectorNameString);
+
+
+        LazyCatalogFactory catalogFactory = new LazyCatalogFactory();
+        NoOpTransactionManager noOpTransactionManager = new NoOpTransactionManager();
+        TestingAccessControlManager accessControl = new TestingAccessControlManager(noOpTransactionManager,
+                new EventListenerManager(new EventListenerConfig()));
+        accessControl.loadSystemAccessControl(AllowAllSystemAccessControl.NAME, ImmutableMap.of());
+        catalogFactory.setCatalogFactory(new DefaultCatalogFactory(
+                MetadataManager.createTestMetadataManager(),
+                accessControl,
+                new InMemoryNodeManager(),
+                new PagesIndexPageSorter(new PagesIndex.TestingFactory(false)),
+                new GroupByHashPageIndexerFactory(new JoinCompiler(
+                        Env.getCurrentEnv().getTypeRegistry().getTypeOperators())),
+                new NodeInfo("test"),
+                EmbedVersion.testingVersionEmbedder(),
+                OpenTelemetry.noop(),
+                noOpTransactionManager,
+                new InternalTypeManager(Env.getCurrentEnv().getTypeRegistry()),
+                new NodeSchedulerConfig().setIncludeCoordinator(true),
+                new OptimizerConfig()));
+        catalogFactory.addConnectorFactory(Env.getCurrentEnv().getPluginManager()
+                .getConnectorFactories().get(connectorName));
+
+        // this.coordinatorDynamicCatalogManager = new CoordinatorDynamicCatalogManager(
+        //         new InMemoryCatalogStore(), catalogFactory, MoreExecutors.directExecutor());
+        // this.coordinatorDynamicCatalogManager.loadInitialCatalogs();
+        // this.coordinatorDynamicCatalogManager.createCatalog(trinoCatalogName.getCatalogName(), connectorName,
+        //         trinoConnectorProperties, false);
+
+        this.staticCatalogManager = new TrinoConnectorStaticCatalogManager(trinoCatalogName.getCatalogName(),
+                connectorNameString, catalogFactory, trinoConnectorProperties, MoreExecutors.directExecutor());
+        this.staticCatalogManager.loadInitialCatalogs();
+
+
+        this.connector = staticCatalogManager.getConnectorServices(trinoCatalogHandle).getConnector();
+
+        // initConnector(connectorName, trinoConnectorProperties);
         SessionPropertyManager sessionPropertyManager = initTrinoSessionPropertyManager();
 
         this.trinoSession = Session.builder(sessionPropertyManager)
