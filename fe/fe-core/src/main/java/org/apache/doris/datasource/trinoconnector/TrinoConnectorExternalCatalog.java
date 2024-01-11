@@ -24,9 +24,8 @@ import org.apache.doris.datasource.ExternalCatalog;
 import org.apache.doris.datasource.InitCatalogLog.Type;
 import org.apache.doris.datasource.SessionContext;
 import org.apache.doris.datasource.property.constants.TrinoConnectorProperties;
-import org.apache.doris.datasource.shade.TrinoConnectorStaticCatalogManager;
+import org.apache.doris.datasource.shade.TrinoConnectorServicesProvider;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -43,7 +42,7 @@ import io.trino.connector.CatalogServiceProviderModule;
 import io.trino.connector.ConnectorAwareNodeManager;
 import io.trino.connector.ConnectorContextInstance;
 import io.trino.connector.ConnectorName;
-import io.trino.connector.CoordinatorDynamicCatalogManager;
+import io.trino.connector.ConnectorServicesProvider;
 import io.trino.connector.DefaultCatalogFactory;
 import io.trino.connector.InternalMetadataProvider;
 import io.trino.connector.LazyCatalogFactory;
@@ -68,6 +67,7 @@ import io.trino.plugin.base.security.AllowAllSystemAccessControl;
 import io.trino.spi.classloader.ThreadContextClassLoader;
 import io.trino.spi.connector.CatalogHandle;
 import io.trino.spi.connector.CatalogHandle.CatalogVersion;
+import static io.trino.spi.connector.CatalogHandle.createRootCatalogHandle;
 import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorContext;
 import io.trino.spi.connector.ConnectorFactory;
@@ -116,8 +116,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     private Session trinoSession;
     private Connector connector;
     private final QueryIdGenerator queryIdGenerator = new QueryIdGenerator();
-    private CoordinatorDynamicCatalogManager coordinatorDynamicCatalogManager;
-    private TrinoConnectorStaticCatalogManager staticCatalogManager;
+    private ConnectorServicesProvider trinoConnectorServicesProvider;
 
     public TrinoConnectorExternalCatalog(long catalogId, String name, String resource,
             Map<String, String> props, String comment) {
@@ -125,39 +124,90 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
         Objects.requireNonNull(name, "catalogName is null");
         catalogProperty = new CatalogProperty(resource, props);
         trinoCatalogName = new CatalogName(name);
-        trinoCatalogHandle = CatalogHandle.createRootCatalogHandle(name, new CatalogVersion("test"));
+        trinoCatalogHandle = createRootCatalogHandle(name, new CatalogVersion("test"));
     }
 
-    private void initConnector(ConnectorName connectorName, Map<String, String> trinoConnectorProperties) {
-        ConnectorFactory connectorFactory = Env.getCurrentEnv().getPluginManager().getConnectorFactories()
-                .get(connectorName);
-        Preconditions.checkArgument(connectorFactory != null, "No factory for connector '%s'.  Available factories: %s",
-                connectorName,
-                Env.getCurrentEnv().getPluginManager().getConnectorFactories().keySet());
+    private void initConnector() {
+        Map<String, String> trinoConnectorProperties = getTrinoConnectorProperties();
+        String connectorNameString = trinoConnectorProperties.remove("connector.name");
+        Objects.requireNonNull(connectorNameString, "connectorName is null");
+        if (connectorNameString.indexOf('-') >= 0) {
+            String deprecatedConnectorName = connectorNameString;
+            connectorNameString = connectorNameString.replace('-', '_');
+            LOG.warn("You are using the deprecated connector name '{}'. The correct connector name is '{}'",
+                    deprecatedConnectorName, connectorNameString);
+        }
+        ConnectorName connectorName = new ConnectorName(connectorNameString);
 
-        // create connector
-        this.connector = createConnector(trinoCatalogName, connectorFactory, trinoConnectorProperties);
+        LazyCatalogFactory catalogFactory = new LazyCatalogFactory();
+        NoOpTransactionManager noOpTransactionManager = new NoOpTransactionManager();
+        TestingAccessControlManager accessControl = new TestingAccessControlManager(noOpTransactionManager,
+                new EventListenerManager(new EventListenerConfig()));
+        accessControl.loadSystemAccessControl(AllowAllSystemAccessControl.NAME, ImmutableMap.of());
+        catalogFactory.setCatalogFactory(new DefaultCatalogFactory(
+                MetadataManager.createTestMetadataManager(),
+                accessControl,
+                new InMemoryNodeManager(),
+                new PagesIndexPageSorter(new PagesIndex.TestingFactory(false)),
+                new GroupByHashPageIndexerFactory(new JoinCompiler(
+                        Env.getCurrentEnv().getTypeRegistry().getTypeOperators())),
+                new NodeInfo("test"),
+                EmbedVersion.testingVersionEmbedder(),
+                OpenTelemetry.noop(),
+                noOpTransactionManager,
+                new InternalTypeManager(Env.getCurrentEnv().getTypeRegistry()),
+                new NodeSchedulerConfig().setIncludeCoordinator(true),
+                new OptimizerConfig()));
+        catalogFactory.addConnectorFactory(Env.getCurrentEnv().getPluginManager()
+                .getConnectorFactories().get(connectorName));
+
+        trinoConnectorServicesProvider = new TrinoConnectorServicesProvider(trinoCatalogName.getCatalogName(),
+                connectorNameString, catalogFactory, trinoConnectorProperties, MoreExecutors.directExecutor());
+        trinoConnectorServicesProvider.loadInitialCatalogs();
+        this.connector = trinoConnectorServicesProvider.getConnectorServices(trinoCatalogHandle).getConnector();
+
+        // solution 2: not need ConnectorServicesProvider, desc table has bug
+        // CatalogProperties catalogProperties = new CatalogProperties(
+        //         createRootCatalogHandle(trinoCatalogName.getCatalogName(), new CatalogVersion("default")),
+        //         connectorName, ImmutableMap.copyOf(trinoConnectorProperties));
+        // LOG.info("-- Loading catalog {} --", trinoCatalogName.getCatalogName());
+        // CatalogConnector trinoCatalog = catalogFactory.createCatalog(catalogProperties);
+        // LOG.info("-- Added catalog {} using connector {} --",
+        //         trinoCatalogName.getCatalogName(), trinoCatalog.getConnectorName());
+        // this.connector = trinoCatalog.getMaterializedConnector(trinoCatalogHandle.getType()).getConnector();
     }
 
     private SessionPropertyManager initTrinoSessionPropertyManager() {
+        // solution 1: need ConnectorServicesProvider
         Set<SystemSessionPropertiesProvider> extraSessionProperties = ImmutableSet.of();
-
         Set<SystemSessionPropertiesProvider> systemSessionProperties =
                 ImmutableSet.<SystemSessionPropertiesProvider>builder()
-                .addAll(Objects.requireNonNull(extraSessionProperties, "extraSessionProperties is null"))
-                .add(new SystemSessionProperties(
-                        new QueryManagerConfig(),
-                        new TaskManagerConfig(),
-                        new MemoryManagerConfig(),
-                        Env.getCurrentEnv().getFeaturesConfig(),
-                        new OptimizerConfig(),
-                        new NodeMemoryConfig(),
-                        new DynamicFilterConfig(),
-                        new NodeSchedulerConfig()))
-                .build();
+                        .addAll(Objects.requireNonNull(extraSessionProperties, "extraSessionProperties is null"))
+                        .add(new SystemSessionProperties(
+                                new QueryManagerConfig(),
+                                new TaskManagerConfig(),
+                                new MemoryManagerConfig(),
+                                Env.getCurrentEnv().getFeaturesConfig(),
+                                new OptimizerConfig(),
+                                new NodeMemoryConfig(),
+                                new DynamicFilterConfig(),
+                                new NodeSchedulerConfig()))
+                        .build();
 
         return CatalogServiceProviderModule.createSessionPropertyManager(systemSessionProperties,
-                staticCatalogManager);
+                trinoConnectorServicesProvider);
+
+        // solution 2: not need ConnectorServicesProvider, desc table has bug
+        // SystemSessionPropertiesProvider systemSessionProperties = new SystemSessionProperties(
+        //                 new QueryManagerConfig(),
+        //                 new TaskManagerConfig(),
+        //                 new MemoryManagerConfig(),
+        //                 Env.getCurrentEnv().getFeaturesConfig(),
+        //                 new OptimizerConfig(),
+        //                 new NodeMemoryConfig(),
+        //                 new DynamicFilterConfig(),
+        //                 new NodeSchedulerConfig());
+        // return new SessionPropertyManager(systemSessionProperties);
     }
 
     @Override
@@ -262,13 +312,6 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
         return properties;
     }
 
-    private void setTrinoConnectorExtraOptions(Map<String, String> properties,
-            Map<String, String> trinoConnectorProperties) {
-        for (String trinoPropertyKey : TRINO_HIVE_REQUIRED_PROPERTIES) {
-            trinoConnectorProperties.put(trinoPropertyKey, properties.get(trinoPropertyKey));
-        }
-    }
-
     public Connector getConnector() {
         return connector;
     }
@@ -283,50 +326,9 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
 
     @Override
     protected void initLocalObjectsImpl() {
-        Map<String, String> trinoConnectorProperties = getTrinoConnectorProperties();
-        String connectorNameString = trinoConnectorProperties.remove("connector.name");
-        Objects.requireNonNull(connectorNameString, "connectorName is null");
-        ConnectorName connectorName = new ConnectorName(connectorNameString);
+        initConnector();
 
-
-        LazyCatalogFactory catalogFactory = new LazyCatalogFactory();
-        NoOpTransactionManager noOpTransactionManager = new NoOpTransactionManager();
-        TestingAccessControlManager accessControl = new TestingAccessControlManager(noOpTransactionManager,
-                new EventListenerManager(new EventListenerConfig()));
-        accessControl.loadSystemAccessControl(AllowAllSystemAccessControl.NAME, ImmutableMap.of());
-        catalogFactory.setCatalogFactory(new DefaultCatalogFactory(
-                MetadataManager.createTestMetadataManager(),
-                accessControl,
-                new InMemoryNodeManager(),
-                new PagesIndexPageSorter(new PagesIndex.TestingFactory(false)),
-                new GroupByHashPageIndexerFactory(new JoinCompiler(
-                        Env.getCurrentEnv().getTypeRegistry().getTypeOperators())),
-                new NodeInfo("test"),
-                EmbedVersion.testingVersionEmbedder(),
-                OpenTelemetry.noop(),
-                noOpTransactionManager,
-                new InternalTypeManager(Env.getCurrentEnv().getTypeRegistry()),
-                new NodeSchedulerConfig().setIncludeCoordinator(true),
-                new OptimizerConfig()));
-        catalogFactory.addConnectorFactory(Env.getCurrentEnv().getPluginManager()
-                .getConnectorFactories().get(connectorName));
-
-        // this.coordinatorDynamicCatalogManager = new CoordinatorDynamicCatalogManager(
-        //         new InMemoryCatalogStore(), catalogFactory, MoreExecutors.directExecutor());
-        // this.coordinatorDynamicCatalogManager.loadInitialCatalogs();
-        // this.coordinatorDynamicCatalogManager.createCatalog(trinoCatalogName.getCatalogName(), connectorName,
-        //         trinoConnectorProperties, false);
-
-        this.staticCatalogManager = new TrinoConnectorStaticCatalogManager(trinoCatalogName.getCatalogName(),
-                connectorNameString, catalogFactory, trinoConnectorProperties, MoreExecutors.directExecutor());
-        this.staticCatalogManager.loadInitialCatalogs();
-
-
-        this.connector = staticCatalogManager.getConnectorServices(trinoCatalogHandle).getConnector();
-
-        // initConnector(connectorName, trinoConnectorProperties);
         SessionPropertyManager sessionPropertyManager = initTrinoSessionPropertyManager();
-
         this.trinoSession = Session.builder(sessionPropertyManager)
                 .setQueryId(queryIdGenerator.createNextQueryId())
                 .setIdentity(Identity.ofUser("user"))
