@@ -17,7 +17,6 @@
 
 package org.apache.doris.datasource.trinoconnector;
 
-import org.apache.doris.catalog.Env;
 import org.apache.doris.common.DdlException;
 import org.apache.doris.datasource.CatalogProperty;
 import org.apache.doris.datasource.ExternalCatalog;
@@ -210,18 +209,17 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                 accessControl,
                 new InMemoryNodeManager(),
                 new PagesIndexPageSorter(new PagesIndex.TestingFactory(false)),
-                new GroupByHashPageIndexerFactory(new JoinCompiler(
-                        Env.getCurrentEnv().getTypeRegistry().getTypeOperators())),
+                new GroupByHashPageIndexerFactory(new JoinCompiler(TrinoConnectorPluginLoader.getTypeOperators())),
                 new NodeInfo("test"),
                 EmbedVersion.testingVersionEmbedder(),
                 OpenTelemetry.noop(),
                 noOpTransactionManager,
-                new InternalTypeManager(Env.getCurrentEnv().getTypeRegistry()),
+                new InternalTypeManager(TrinoConnectorPluginLoader.getTypeRegistry()),
                 new NodeSchedulerConfig().setIncludeCoordinator(true),
                 new OptimizerConfig()));
 
         Optional<ConnectorFactory> connectorFactory = Optional.ofNullable(
-                Env.getCurrentEnv().getTrinoConnectorPluginManager().getConnectorFactories().get(connectorName));
+                TrinoConnectorPluginLoader.getTrinoConnectorPluginManager().getConnectorFactories().get(connectorName));
         if (!connectorFactory.isPresent()) {
             throw new RuntimeException("Can not find connectorFactory, did you forget to install plugins?");
         }
@@ -245,7 +243,7 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                                 new QueryManagerConfig(),
                                 new TaskManagerConfig(),
                                 new MemoryManagerConfig(),
-                                Env.getCurrentEnv().getFeaturesConfig(),
+                                TrinoConnectorPluginLoader.getFeaturesConfig(),
                                 new OptimizerConfig(),
                                 new NodeMemoryConfig(),
                                 new DynamicFilterConfig(),
