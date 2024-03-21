@@ -1,0 +1,55 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package org.apache.doris.datasource.trinoconnector;
+
+import org.apache.doris.qe.ConnectContext;
+import org.apache.doris.thrift.TUniqueId;
+
+import com.google.common.collect.Maps;
+import io.trino.spi.connector.Connector;
+import io.trino.spi.connector.ConnectorTransactionHandle;
+import io.trino.spi.transaction.IsolationLevel;
+
+import java.util.Map;
+import java.util.UUID;
+
+public class TrinoConnectorTransactionManager {
+    // TODO: when to delete entry?
+    // TODO: 考虑并发
+    private static Map<TUniqueId, ConnectorTransactionHandle> queryTranscations = Maps.newHashMap();
+
+    public static synchronized ConnectorTransactionHandle queryBeginTransaction(Connector connector) {
+        TUniqueId tUniqueId;
+        if (ConnectContext.get() != null) {
+            tUniqueId = ConnectContext.get().queryId();
+        } else {
+            UUID uuid = UUID.randomUUID();
+            tUniqueId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        }
+
+        ConnectorTransactionHandle connectorTransactionHandle;
+        if (queryTranscations.containsKey(tUniqueId)) {
+            connectorTransactionHandle =  queryTranscations.get(tUniqueId);
+        } else {
+            connectorTransactionHandle = connector.beginTransaction(
+                    IsolationLevel.READ_UNCOMMITTED, true, true);
+            queryTranscations.put(tUniqueId, connectorTransactionHandle);
+        }
+        return connectorTransactionHandle;
+    }
+}

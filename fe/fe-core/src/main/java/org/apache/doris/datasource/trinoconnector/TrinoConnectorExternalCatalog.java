@@ -162,8 +162,8 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
     @Override
     protected List<String> listDatabaseNames() {
         ConnectorSession connectorSession = trinoSession.toConnectorSession(trinoCatalogHandle);
-        ConnectorTransactionHandle connectorTransactionHandle = this.connector.beginTransaction(
-                IsolationLevel.READ_UNCOMMITTED, true, true);
+        ConnectorTransactionHandle connectorTransactionHandle =
+                TrinoConnectorTransactionManager.queryBeginTransaction(connector);
         ConnectorMetadata connectorMetadata = this.connector.getMetadata(connectorSession, connectorTransactionHandle);
         return connectorMetadata.listSchemaNames(connectorSession);
     }
@@ -261,8 +261,8 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
 
         Set<QualifiedObjectName> tables = new LinkedHashSet();
         ConnectorSession connectorSession = trinoSession.toConnectorSession(trinoCatalogHandle);
-        ConnectorTransactionHandle connectorTransactionHandle = this.connector.beginTransaction(
-                IsolationLevel.READ_UNCOMMITTED, true, true);
+        ConnectorTransactionHandle connectorTransactionHandle =
+                TrinoConnectorTransactionManager.queryBeginTransaction(connector);
         ConnectorMetadata connectorMetadata = this.connector.getMetadata(connectorSession, connectorTransactionHandle);
         List<SchemaTableName> schemaTableNames = connectorMetadata.listTables(connectorSession, prefix.getSchemaName());
         List<QualifiedObjectName> tmpTables = new ArrayList<>();
@@ -284,8 +284,8 @@ public class TrinoConnectorExternalCatalog extends ExternalCatalog {
                 && !tableName.getSchemaName().isEmpty()
                 && !tableName.getObjectName().isEmpty()) {
             ConnectorSession connectorSession = trinoSession.toConnectorSession(trinoCatalogHandle);
-            ConnectorTransactionHandle connectorTransactionHandle = this.connector.beginTransaction(
-                    IsolationLevel.READ_UNCOMMITTED, true, true);
+            ConnectorTransactionHandle connectorTransactionHandle =
+                    TrinoConnectorTransactionManager.queryBeginTransaction(connector);
             return Optional.ofNullable(
                     this.connector.getMetadata(connectorSession, connectorTransactionHandle)
                             .getTableHandle(connectorSession, tableName.asSchemaTableName(),

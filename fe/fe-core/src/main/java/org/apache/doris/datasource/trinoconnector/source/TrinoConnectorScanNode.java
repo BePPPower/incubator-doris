@@ -29,6 +29,7 @@ import org.apache.doris.datasource.FileQueryScanNode;
 import org.apache.doris.datasource.TableFormatType;
 import org.apache.doris.datasource.trinoconnector.TrinoConnectorExternalTable;
 import org.apache.doris.datasource.trinoconnector.TrinoConnectorPluginLoader;
+import org.apache.doris.datasource.trinoconnector.TrinoConnectorTransactionManager;
 import org.apache.doris.nereids.glue.translator.PlanTranslatorContext;
 import org.apache.doris.planner.PlanNodeId;
 import org.apache.doris.spi.Split;
@@ -113,8 +114,8 @@ public class TrinoConnectorScanNode extends FileQueryScanNode {
     public List<Split> getSplits() throws UserException {
         // 1. Get necessary objects
         Connector connector = source.getConnector();
-        ConnectorTransactionHandle connectorTransactionHandle = connector.beginTransaction(
-                IsolationLevel.READ_UNCOMMITTED, true, true);
+        ConnectorTransactionHandle connectorTransactionHandle =
+                TrinoConnectorTransactionManager.queryBeginTransaction(connector);
         source.setConnectorTransactionHandle(connectorTransactionHandle);
         ConnectorSession connectorSession = source.getTrinoSession().toConnectorSession(source.getCatalogHandle());
         ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);

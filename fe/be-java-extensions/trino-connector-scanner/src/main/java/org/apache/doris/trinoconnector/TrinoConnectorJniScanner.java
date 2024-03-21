@@ -108,7 +108,6 @@ public class TrinoConnectorJniScanner extends JniScanner {
     private ObjectMapperProvider objectMapperProvider;
 
 
-    private ConnectorPageSourceProvider pageSourceProvider;
     private ConnectorPageSource source;
     private ConnectorSplit connectorSplit;
     private ConnectorTransactionHandle connectorTransactionHandle;
@@ -148,7 +147,7 @@ public class TrinoConnectorJniScanner extends JniScanner {
     @Override
     public void open() throws IOException {
         initConnector();
-        this.pageSourceProvider = getConnectorPageSourceProvider();
+        ConnectorPageSourceProvider pageSourceProvider = getConnectorPageSourceProvider();
         // mock ObjectMapperProvider
         this.objectMapperProvider = generateObjectMapperProvider();
         initTrinoTableMetadata();

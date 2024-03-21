@@ -95,8 +95,8 @@ public class TrinoConnectorExternalTable extends ExternalTable {
         ConnectorSession connectorSession = trinoSession.toConnectorSession(catalogHandle);
 
         // 2. Begin transaction and get ConnectorMetadata
-        ConnectorTransactionHandle connectorTransactionHandle = connector.beginTransaction(
-                IsolationLevel.READ_UNCOMMITTED, true, true);
+        ConnectorTransactionHandle connectorTransactionHandle =
+                TrinoConnectorTransactionManager.queryBeginTransaction(connector);
         ConnectorMetadata connectorMetadata = connector.getMetadata(connectorSession, connectorTransactionHandle);
 
         // 3. Get ConnectorTableHandle
