@@ -67,7 +67,6 @@ import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 import io.trino.spi.connector.Constraint;
 import io.trino.spi.connector.DynamicFilter;
-import io.trino.spi.transaction.IsolationLevel;
 import io.trino.spi.type.TypeManager;
 import io.trino.split.BufferingSplitSource;
 import io.trino.split.ConnectorAwareSplitSource;

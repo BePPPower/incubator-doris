@@ -70,7 +70,6 @@ import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.security.Identity;
-import io.trino.spi.transaction.IsolationLevel;
 import io.trino.spi.type.TimeZoneKey;
 import io.trino.sql.gen.JoinCompiler;
 import io.trino.sql.planner.OptimizerConfig;
