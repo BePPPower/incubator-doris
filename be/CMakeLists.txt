@@ -484,6 +484,10 @@ set(KRB5_LIBS
     gssapi_krb5
     k5crypto)
 
+set(absl_DIR ${THIRDPARTY_DIR}/lib/cmake/absl)
+find_package(absl)
+find_package(google_cloud_cpp_storage REQUIRED)
+
 # Set Doris libraries
 set(DORIS_LINK_LIBS
     ${WL_START_GROUP}
@@ -507,10 +511,9 @@ set(DORIS_LINK_LIBS
     Cloud
     ${WL_END_GROUP}
     CommonCPP
+    google-cloud-cpp::storage
 )
 
-set(absl_DIR ${THIRDPARTY_DIR}/lib/cmake/absl)
-find_package(absl)
 
 # COMMON_THIRDPARTY are thirdparty dependencies that can run on all platform
 # When adding new dependencies, If you don’t know if it can run on all platforms,

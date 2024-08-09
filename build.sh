@@ -594,6 +594,7 @@ if [[ "${BUILD_BE}" -eq 1 ]]; then
         -DENABLE_CLANG_COVERAGE="${DENABLE_CLANG_COVERAGE}" \
         -DDORIS_JAVA_HOME="${JAVA_HOME}" \
         -DBUILD_AZURE="${BUILD_AZURE}" \
+        -DCMAKE_TOOLCHAIN_FILE=/mnt/disk2/ftw/projects/tmp/gcs/vcpkg/scripts/buildsystems/vcpkg.cmake \
         "${DORIS_HOME}/be"
 
     if [[ "${OUTPUT_BE_BINARY}" -eq 1 ]]; then
